@@ -1,0 +1,4 @@
+[submodule "client_gateway/proto"]
+	path = client_gateway/proto
+	url = https://github.com/chronolens/gateway-protocol
+	branch = main
