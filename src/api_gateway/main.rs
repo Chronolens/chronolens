@@ -1,12 +1,10 @@
-#[macro_use]
-extern crate diesel;
 mod db;
 mod nats_api;
 mod proto {
     tonic::include_proto!("chronolens");
 }
 
-use db::{get_user_password, DbAccess};
+use db::DbAccess;
 use jsonwebtoken::{EncodingKey, Header};
 use proto::{
     chrono_lens_server::{ChronoLens, ChronoLensServer},
@@ -40,17 +38,8 @@ impl ChronoLens for ChronoLensService {
     ) -> Result<Response<LoginResponse>, Status> {
         let login_request = request.into_inner();
 
-        let mut database = match self.database.pool.get() {
-            Ok(db) => db,
-            Err(..) => {
-                return Err(Status::internal(
-                    "An internal error occurred. Please try again later.",
-                ))
-            }
-        };
-
-        let password_hash = match get_user_password(&mut database, login_request.username) {
-            Ok(pw) => pw,
+        let password_hash = match self.database.get_user_password(login_request.username).await {
+            Ok(pw) => pw.password,
             Err(..) => return Err(Status::not_found("Invalid username or password")),
         };
 
@@ -89,7 +78,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Err(err) => panic!("{}", err),
     };
 
-    let database = match DbAccess::new() {
+    let database = match DbAccess::new().await {
         Ok(database) => database,
         Err(err) => panic!("{}", err),
     };
