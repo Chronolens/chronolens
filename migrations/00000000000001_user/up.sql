@@ -1,7 +1,0 @@
--- Your SQL goes here
-CREATE TABLE
-  "user" (
-    id BIGINT PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
-    username TEXT NOT NULL UNIQUE,
-    password TEXT NOT NULL
-);
