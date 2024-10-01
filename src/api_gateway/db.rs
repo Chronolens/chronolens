@@ -1,6 +1,8 @@
 use chronolens::schema::user;
-use diesel::r2d2::{ConnectionManager, Pool};
-use diesel::{ConnectionError, ExpressionMethods, PgConnection, QueryDsl, RunQueryDsl};
+use sea_orm::{
+    ColumnTrait, ConnectOptions, Database, DatabaseConnection, DbErr, EntityTrait, FromQueryResult,
+    QueryFilter, QuerySelect,
+};
 use serde::Deserialize;
 
 #[derive(Deserialize, Debug)]
@@ -22,11 +24,11 @@ fn default_port() -> u16 {
 }
 
 pub struct DbAccess {
-    pub pool: Pool<ConnectionManager<PgConnection>>,
+    pub connection: DatabaseConnection,
 }
 
 impl DbAccess {
-    pub fn new() -> Result<Self, ConnectionError> {
+    pub async fn new() -> Result<Self, DbErr> {
         let db_config = envy::from_env::<DbEnvs>().unwrap();
         let connection_string = format!(
             "postgresql://{}:{}@{}:{}/{}",
@@ -36,27 +38,31 @@ impl DbAccess {
             db_config.database_port,
             db_config.database_name
         );
-        let manager = ConnectionManager::<PgConnection>::new(&connection_string);
-        let pool = Pool::builder()
-            .build(manager)
-            .expect("Failed to create pool.");
-        Ok(DbAccess { pool })
+        let mut opt = ConnectOptions::new(&connection_string);
+        opt.max_connections(100).min_connections(5);
+        let connection: DatabaseConnection = Database::connect(opt).await?;
+        Ok(DbAccess { connection })
+    }
+
+    pub async fn get_user_password(&self, username: String) -> Result<UserPassword, &str> {
+        match user::Entity::find()
+            .select_only()
+            .column(user::Column::Password)
+            .filter(user::Column::Username.eq(username))
+            .into_model::<UserPassword>()
+            .one(&self.connection)
+            .await
+        {
+            Ok(password_hash) => Ok(password_hash.expect("Username or password not found")),
+            Err(err) => {
+                println!("Err: {}", err);
+                Err("Failed to get user password")
+            }
+        }
     }
 }
 
-pub fn get_user_password(connection: &mut PgConnection, username: String) -> Result<String, &str> {
-    #[derive(Insertable)]
-    #[diesel(table_name = user)]
-    struct LoginRequest {
-        username: String,
-        password: String,
-    }
-    match user::dsl::user
-        .filter(user::columns::username.eq(&username))
-        .select(user::columns::password)
-        .first::<String>(connection)
-    {
-        Ok(password_hash) => Ok(password_hash),
-        Err(..) => Err("Failed to get user password"),
-    }
+#[derive(Debug, FromQueryResult)]
+pub struct UserPassword {
+    pub password: String,
 }
