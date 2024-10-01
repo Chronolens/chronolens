@@ -1,0 +1,26 @@
+[package]
+name = "chronolens"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+bcrypt = "0.15.1"
+chrono = "0.4.38"
+diesel = { version = "2.2.4", features = ["postgres", "r2d2"] }
+dotenvy = "0.15.7"
+envy = "0.4.2"
+jsonwebtoken = "9.3.0"
+prost = "0.13.3"
+r2d2 = "0.8.10"
+serde = { version = "1.0.210", features = ["derive"] }
+tokio = { version = "1.40.0", features = ["full"] }
+tonic = "0.12.2"
+
+[build-dependencies]
+protoc = "2.28.0"
+tonic-build = "0.12.2"
+
+[[bin]]
+name = "api"
+path = "./src/api_gateway/main.rs"
+
