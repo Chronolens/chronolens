@@ -1,0 +1,12 @@
+[package]
+name = "preview"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tokio = { version = "1", features = ["full"] }
+async-nats = "0.37.0"
+image = "0.25.2"
+libheif-rs = "1.0.2"
+rust-s3 = "0.35.1"
+futures-util = "0.3.30"
