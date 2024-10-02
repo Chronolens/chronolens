@@ -1,9 +1,11 @@
-use std::io::Cursor;
+use std::borrow::Borrow;
+use std::io::{Cursor, Read};
+use std::str::from_utf8;
 
 use async_nats::jetstream::Message;
 use futures_util::StreamExt;
 use image::{imageops::FilterType::Triangle, DynamicImage, ImageReader};
-use s3::{creds::Credentials, Bucket, BucketConfiguration, Region};
+use s3::{creds::Credentials, error::S3Error, Bucket, BucketConfiguration, Region};
 
 // Flow to create a preview
 // 1. Get event wiht uid of image from NATS
@@ -24,13 +26,69 @@ async fn main() -> Result<(), async_nats::Error> {
         region: "eu-central-1".to_string(),
         endpoint: "http://localhost:9000".to_string(),
     };
-    // let access_key = "GvvD9X0sWWrRGURPxeHS";
-    // let secret_key = "fVVfN0xxXW1ffz1bsKKjyrKQB9OomX3djpMtSr8C";
-    // let credentials = Credentials::new(Some(access_key), Some(secret_key), None, None, None)
-    //     .expect("Couldn't create credentials");
     let credentials = Credentials::default().expect("Credentials died");
+
+    // connect to nats
+    let addrs = "placeholder.io";
+    let stream_name = "previews".to_string();
+
+    let client = match async_nats::connect(addrs).await {
+        Ok(c) => c,
+        Err(..) => panic!("Couldn't connect nats client."),
+    };
+
+    let jetstream = async_nats::jetstream::new(client);
+    let stream = jetstream
+        .get_or_create_stream(async_nats::jetstream::stream::Config {
+            name: stream_name,
+            max_messages: 10000,
+            ..Default::default()
+        })
+        .await?;
+
+    let consumer = stream
+        .get_or_create_consumer(
+            "preview_consumer",
+            async_nats::jetstream::consumer::pull::Config {
+                durable_name: Some("preview_consumer".to_string()),
+                ..Default::default()
+            },
+        )
+        .await?;
+
+    let preview_bucket = match get_bucket(bucket_name, region, credentials).await {
+        Ok(b) => b,
+        Err(err) => panic!("Couldn't get preview bucket: {}", err),
+    };
+
+    let mut messages = consumer.messages().await?;
+    while let Some(message) = messages.next().await {
+        match message {
+            Ok(msg) => {
+                println!(
+                    "Message received: {:?}",
+                    String::from_utf8(msg.payload.to_vec())
+                );
+
+                // TODO: spawn a thread for each event
+                handle_message(msg, preview_bucket.clone());
+            }
+            Err(..) => {
+                println!("Error receiving message");
+                panic!();
+            }
+        }
+    }
+    Ok(())
+}
+
+async fn get_bucket(
+    bucket_name: &str,
+    region: Region,
+    credentials: Credentials,
+) -> Result<Box<Bucket>, S3Error> {
     let mut bucket = Bucket::new(bucket_name, region.clone(), credentials.clone())
-        .expect("Couldn't create bucket");
+        .expect("Couldn't create new bucket");
 
     if !bucket.exists().await? {
         bucket = Bucket::create_with_path_style(
@@ -42,71 +100,79 @@ async fn main() -> Result<(), async_nats::Error> {
         .await?
         .bucket;
     }
-
-    let test_path = "preview.jpg";
-    let test_image = ImageReader::open(test_path)?.decode()?;
-    // Convert image to bytes in jpg format
-    let mut test_image_bytes: Vec<u8> = Vec::new();
-    test_image.write_to(
-        &mut Cursor::new(&mut test_image_bytes),
-        image::ImageFormat::Jpeg,
-    )?;
-
-    let response_data = bucket.put_object(test_path, &test_image_bytes).await?;
-    assert_eq!(response_data.status_code(), 200);
-
-
-
-    // connect to nats
-    // let addrs = "placeholder.io";
-    // let stream_name = "previews".to_string();
-    //
-    // let client = match async_nats::connect(addrs).await {
-    //     Ok(c) => c,
-    //     Err(..) => panic!("Couldn't connect nats client."),
-    // };
-    //
-    // let jetstream = async_nats::jetstream::new(client);
-    // let stream = jetstream
-    //     .get_or_create_stream(async_nats::jetstream::stream::Config {
-    //         name: stream_name,
-    //         max_messages: 10000,
-    //         ..Default::default()
-    //     })
-    //     .await?;
-    //
-    // let consumer = stream
-    //     .get_or_create_consumer(
-    //         "preview_consumer",
-    //         async_nats::jetstream::consumer::pull::Config {
-    //             durable_name: Some("preview_consumer".to_string()),
-    //             ..Default::default()
-    //         },
-    //     )
-    //     .await?;
-    //
-    // let mut messages = consumer.messages().await?;
-    // while let Some(message) = messages.next().await {
-    //     match message {
-    //         Ok(msg) => {
-    //             println!(
-    //                 "Message received: {:?}",
-    //                 String::from_utf8(msg.payload.to_vec())
-    //             );
-    //
-    //             // TODO: spawn a thread for each event
-    //             handle_message(msg);
-    //         }
-    //         Err(..) => {
-    //             println!("Error receiving message");
-    //             panic!();
-    //         }
-    //     }
-    // }
-    Ok(())
+    return Ok(bucket);
 }
 
-async fn handle_message(msg: Message) {
+// TODO: add orignal images bucket
+// db update
+// redo code and break it into functions
+// test it
+async fn handle_message(msg: Message, preview_bucket: Box<Bucket>) {
+    let payload_bytes: &[u8] = &msg.payload;
+    let image_path = match from_utf8(payload_bytes) {
+        Ok(path) => path.to_owned(),
+        Err(err) => {
+            println!("Couldn't convert image path into utf8: {err:?}");
+            return;
+        }
+    };
+    // FIX: This bucket should be the original images bucket
+    let orig_image_response = match preview_bucket.get_object(image_path.clone()).await {
+        Ok(oi) => oi,
+        Err(err) => {
+            println!("Get object failed: {err}");
+            return;
+        }
+    };
+    if orig_image_response.status_code() != 200 {
+        println!(
+            "Get original image failed with status code: {}",
+            orig_image_response.status_code()
+        );
+    }
+
+    let orig_reader =
+        match ImageReader::new(Cursor::new(orig_image_response.as_slice())).with_guessed_format() {
+            Ok(rd) => rd,
+            Err(err) => {
+                println!("Couldn't convert image: {err}");
+                return;
+            }
+        };
+    let orig_image = match orig_reader.decode() {
+        Ok(oi) => oi,
+        Err(err) => {
+            println!("Couldn't convert image: {err}");
+            return;
+        }
+    };
+
+    // Create preview
+    let preview = create_preview(orig_image, 640, 640);
+
+    // Convert image to bytes in jpg format
+    let mut preview_bytes: Vec<u8> = Vec::new();
+    let _ = preview.write_to(
+        &mut Cursor::new(&mut preview_bytes),
+        image::ImageFormat::Jpeg,
+    );
+    let preview_response_data = match preview_bucket.put_object(image_path, &preview_bytes).await {
+        Ok(rp) => rp,
+        Err(err) => {
+            println!("Put preview object failed with: {err}");
+            return;
+        }
+    };
+    if preview_response_data.status_code() != 200 {
+        println!(
+            "Put preview object failed with status code: {}",
+            preview_response_data.status_code()
+        );
+        return;
+    }
+
+    // TODO: db update
+
     match msg.ack().await {
         Ok(()) => (),
         Err(..) => println!("Couldn't acknowledge message"),
