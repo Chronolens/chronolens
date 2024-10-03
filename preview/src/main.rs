@@ -1,11 +1,13 @@
-use std::borrow::Borrow;
-use std::io::{Cursor, Read};
+use std::io::Cursor;
 use std::str::from_utf8;
+use std::sync::Arc;
 
 use async_nats::jetstream::Message;
+use async_nats::rustls::lock::Mutex;
 use futures_util::StreamExt;
 use image::{imageops::FilterType::Triangle, DynamicImage, ImageReader};
 use s3::{creds::Credentials, error::S3Error, Bucket, BucketConfiguration, Region};
+use uuid::Uuid;
 
 // Flow to create a preview
 // 1. Get event wiht uid of image from NATS
@@ -56,10 +58,12 @@ async fn main() -> Result<(), async_nats::Error> {
         )
         .await?;
 
-    let preview_bucket = match get_bucket(bucket_name, region, credentials).await {
+    let bucket = match get_bucket(bucket_name, region, credentials).await {
         Ok(b) => b,
         Err(err) => panic!("Couldn't get preview bucket: {}", err),
     };
+
+    let thread_bucket = Arc::new(Mutex::new(bucket));
 
     let mut messages = consumer.messages().await?;
     while let Some(message) = messages.next().await {
@@ -71,7 +75,8 @@ async fn main() -> Result<(), async_nats::Error> {
                 );
 
                 // TODO: spawn a thread for each event
-                handle_message(msg, preview_bucket.clone());
+                let thread_bucket_clone = thread_bucket.clone();
+                tokio::spawn(async move { handle_message(msg, thread_bucket_clone).await });
             }
             Err(..) => {
                 println!("Error receiving message");
@@ -104,33 +109,37 @@ async fn get_bucket(
 }
 
 // TODO: add orignal images bucket
-// db update
 // redo code and break it into functions
 // test it
-async fn handle_message(msg: Message, preview_bucket: Box<Bucket>) {
+async fn handle_message(msg: Message, preview_bucket: Arc<Mutex<Box<Bucket>>>) {
     let payload_bytes: &[u8] = &msg.payload;
-    let image_path = match from_utf8(payload_bytes) {
+    let orig_image_id = match from_utf8(payload_bytes) {
         Ok(path) => path.to_owned(),
         Err(err) => {
             println!("Couldn't convert image path into utf8: {err:?}");
             return;
         }
     };
+
     // FIX: This bucket should be the original images bucket
-    let orig_image_response = match preview_bucket.get_object(image_path.clone()).await {
+    // lock bucket
+    let pb_locked = match preview_bucket.lock() {
+        Some(pb_locked) => pb_locked,
+        _ => {
+            println!("Bucket is poisoned in get object");
+            return;
+        }
+    };
+
+    let orig_image_response = match pb_locked.get_object(orig_image_id.clone()).await {
         Ok(oi) => oi,
         Err(err) => {
             println!("Get object failed: {err}");
             return;
         }
     };
-    if orig_image_response.status_code() != 200 {
-        println!(
-            "Get original image failed with status code: {}",
-            orig_image_response.status_code()
-        );
-    }
-
+    // FIX: check if dropping the lock here is correct
+    drop(pb_locked);
     let orig_reader =
         match ImageReader::new(Cursor::new(orig_image_response.as_slice())).with_guessed_format() {
             Ok(rd) => rd,
@@ -156,7 +165,17 @@ async fn handle_message(msg: Message, preview_bucket: Box<Bucket>) {
         &mut Cursor::new(&mut preview_bytes),
         image::ImageFormat::Jpeg,
     );
-    let preview_response_data = match preview_bucket.put_object(image_path, &preview_bytes).await {
+
+    // FIX: lock bucket
+    let preview_id = Uuid::new_v4().to_string();
+    let pb_locked = match preview_bucket.lock() {
+        Some(pb_locked) => pb_locked,
+        _ => {
+            println!("Bucket is poisoned in get object");
+            return;
+        }
+    };
+    let preview_response_data = match pb_locked.put_object(preview_id, &preview_bytes).await {
         Ok(rp) => rp,
         Err(err) => {
             println!("Put preview object failed with: {err}");
@@ -170,6 +189,8 @@ async fn handle_message(msg: Message, preview_bucket: Box<Bucket>) {
         );
         return;
     }
+    // FIX: check here too
+    drop(pb_locked);
 
     // TODO: db update
 
