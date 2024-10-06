@@ -1,9 +1,9 @@
+use std::error::Error;
 use std::io::Cursor;
-use std::str::from_utf8;
+use std::str;
 use std::sync::Arc;
 
 use async_nats::jetstream::Message;
-use async_nats::rustls::lock::Mutex;
 use futures_util::StreamExt;
 use image::{imageops::FilterType::Triangle, DynamicImage, ImageReader};
 use s3::{creds::Credentials, error::S3Error, Bucket, BucketConfiguration, Region};
@@ -19,34 +19,42 @@ use uuid::Uuid;
 // TODO: create the server and client handling
 // connect to object storage
 // connect to database
-
 #[tokio::main]
-async fn main() -> Result<(), async_nats::Error> {
-    // connect to s3 storage
-    let bucket_name = "preview";
-    let region = Region::Custom {
-        region: "eu-central-1".to_string(),
-        endpoint: "http://localhost:9000".to_string(),
-    };
-    let credentials = Credentials::default().expect("Credentials died");
-
+async fn main() -> Result<(), Box<dyn Error>> {
     // connect to nats
-    let addrs = "placeholder.io";
-    let stream_name = "previews".to_string();
+    let nats_addr = "localhost:4222";
+    let stream_name = String::from("previews");
 
-    let client = match async_nats::connect(addrs).await {
+    let bucket_name = "chronolens";
+    let bucket = setup_bucket(&bucket_name, "localhost:9000").await?;
+    let client = match async_nats::connect("localhost").await {
         Ok(c) => c,
-        Err(..) => panic!("Couldn't connect nats client."),
+        Err(err) => panic!("Couldn't connect nats client.{err}"),
     };
 
     let jetstream = async_nats::jetstream::new(client);
     let stream = jetstream
         .get_or_create_stream(async_nats::jetstream::stream::Config {
-            name: stream_name,
+            name: stream_name.clone(),
             max_messages: 10000,
             ..Default::default()
         })
         .await?;
+
+    // FIX: make this a proper test
+    let test_uuid = String::from("27aaaa1f-33be-4988-8334-59a1770fa0d7");
+    let img = ImageReader::open("test.jpg")?.decode()?;
+
+    // Convert image to bytes in jpg format
+    let mut img_bytes: Vec<u8> = Vec::new();
+    img.write_to(&mut Cursor::new(&mut img_bytes), image::ImageFormat::Jpeg)?;
+    let response = bucket.put_object(test_uuid.clone(), &img_bytes).await?;
+    if response.status_code() != 200 {
+        panic!("put test object failed");
+    }
+    jetstream.publish(stream_name, test_uuid.into()).await?;
+
+    // FIX: end of population -----------------------
 
     let consumer = stream
         .get_or_create_consumer(
@@ -58,13 +66,7 @@ async fn main() -> Result<(), async_nats::Error> {
         )
         .await?;
 
-    let bucket = match get_bucket(bucket_name, region, credentials).await {
-        Ok(b) => b,
-        Err(err) => panic!("Couldn't get preview bucket: {}", err),
-    };
-
-    let thread_bucket = Arc::new(Mutex::new(bucket));
-
+    let thread_bucket = Arc::new(bucket);
     let mut messages = consumer.messages().await?;
     while let Some(message) = messages.next().await {
         match message {
@@ -75,7 +77,7 @@ async fn main() -> Result<(), async_nats::Error> {
                 );
 
                 // TODO: spawn a thread for each event
-                let thread_bucket_clone = thread_bucket.clone();
+                let thread_bucket_clone = Arc::clone(&thread_bucket);
                 tokio::spawn(async move { handle_message(msg, thread_bucket_clone).await });
             }
             Err(..) => {
@@ -84,36 +86,15 @@ async fn main() -> Result<(), async_nats::Error> {
             }
         }
     }
-    Ok(())
-}
-
-async fn get_bucket(
-    bucket_name: &str,
-    region: Region,
-    credentials: Credentials,
-) -> Result<Box<Bucket>, S3Error> {
-    let mut bucket = Bucket::new(bucket_name, region.clone(), credentials.clone())
-        .expect("Couldn't create new bucket");
-
-    if !bucket.exists().await? {
-        bucket = Bucket::create_with_path_style(
-            bucket_name,
-            region,
-            credentials,
-            BucketConfiguration::default(),
-        )
-        .await?
-        .bucket;
-    }
-    return Ok(bucket);
+    return Ok(());
 }
 
 // TODO: add orignal images bucket
 // redo code and break it into functions
 // test it
-async fn handle_message(msg: Message, preview_bucket: Arc<Mutex<Box<Bucket>>>) {
+async fn handle_message(msg: Message, preview_bucket: Arc<Box<Bucket>>) {
     let payload_bytes: &[u8] = &msg.payload;
-    let orig_image_id = match from_utf8(payload_bytes) {
+    let orig_image_id = match str::from_utf8(payload_bytes) {
         Ok(path) => path.to_owned(),
         Err(err) => {
             println!("Couldn't convert image path into utf8: {err:?}");
@@ -121,25 +102,14 @@ async fn handle_message(msg: Message, preview_bucket: Arc<Mutex<Box<Bucket>>>) {
         }
     };
 
-    // FIX: This bucket should be the original images bucket
-    // lock bucket
-    let pb_locked = match preview_bucket.lock() {
-        Some(pb_locked) => pb_locked,
-        _ => {
-            println!("Bucket is poisoned in get object");
-            return;
-        }
-    };
-
-    let orig_image_response = match pb_locked.get_object(orig_image_id.clone()).await {
-        Ok(oi) => oi,
+    let orig_image_response = match preview_bucket.get_object(orig_image_id.clone()).await {
+        Ok(oir) => oir,
         Err(err) => {
             println!("Get object failed: {err}");
             return;
         }
     };
-    // FIX: check if dropping the lock here is correct
-    drop(pb_locked);
+
     let orig_reader =
         match ImageReader::new(Cursor::new(orig_image_response.as_slice())).with_guessed_format() {
             Ok(rd) => rd,
@@ -166,16 +136,8 @@ async fn handle_message(msg: Message, preview_bucket: Arc<Mutex<Box<Bucket>>>) {
         image::ImageFormat::Jpeg,
     );
 
-    // FIX: lock bucket
     let preview_id = Uuid::new_v4().to_string();
-    let pb_locked = match preview_bucket.lock() {
-        Some(pb_locked) => pb_locked,
-        _ => {
-            println!("Bucket is poisoned in get object");
-            return;
-        }
-    };
-    let preview_response_data = match pb_locked.put_object(preview_id, &preview_bytes).await {
+    let preview_response_data = match preview_bucket.put_object(preview_id, &preview_bytes).await {
         Ok(rp) => rp,
         Err(err) => {
             println!("Put preview object failed with: {err}");
@@ -189,8 +151,6 @@ async fn handle_message(msg: Message, preview_bucket: Arc<Mutex<Box<Bucket>>>) {
         );
         return;
     }
-    // FIX: check here too
-    drop(pb_locked);
 
     // TODO: db update
 
@@ -198,6 +158,33 @@ async fn handle_message(msg: Message, preview_bucket: Arc<Mutex<Box<Bucket>>>) {
         Ok(()) => (),
         Err(..) => println!("Couldn't acknowledge message"),
     }
+}
+
+async fn setup_bucket(bucket_name: &str, endpoint: &str) -> Result<Box<Bucket>, S3Error> {
+    // connect to s3 storage
+    let region = Region::Custom {
+        region: "eu-central-1".to_string(),
+        endpoint: endpoint.to_string(),
+    };
+    // INFO: this credentials are fetched from the default location of the aws
+    // credentials (~/.aws/credentials)
+    let credentials = Credentials::default().expect("Credentials died");
+
+    let mut bucket =
+        Bucket::new(bucket_name, region.clone(), credentials.clone())?.with_path_style();
+
+    if !bucket.exists().await? {
+        bucket = Bucket::create_with_path_style(
+            bucket_name,
+            region,
+            credentials,
+            BucketConfiguration::default(),
+        )
+        .await?
+        .bucket;
+    }
+    println!("yeye");
+    return Ok(bucket);
 }
 
 fn create_preview(orig: DynamicImage, preview_width: u32, preview_height: u32) -> DynamicImage {
