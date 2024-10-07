@@ -3,22 +3,21 @@ name = "chronolens"
 version = "0.1.0"
 edition = "2021"
 
+# [workspace]
+# members = ['migration']
+
 [dependencies]
+axum = { version = "0.7.7", features = ["http2", "multipart"] }
 bcrypt = "0.15.1"
 chrono = "0.4.38"
 dotenvy = "0.15.7"
 envy = "0.4.2"
 jsonwebtoken = "9.3.0"
-prost = "0.13.3"
 r2d2 = "0.8.10"
 sea-orm = { version = "1.0.1", features = ["sqlx-postgres", "runtime-tokio-rustls", "macros"] }
 serde = { version = "1.0.210", features = ["derive"] }
 tokio = { version = "1.40.0", features = ["full"] }
-tonic = "0.12.2"
-
-[build-dependencies]
-protoc = "2.28.0"
-tonic-build = "0.12.2"
+tower-http = "0.6.1"
 
 [[bin]]
 name = "api"

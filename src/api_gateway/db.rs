@@ -23,6 +23,7 @@ fn default_port() -> u16 {
     5432
 }
 
+#[derive(Clone)]
 pub struct DbAccess {
     pub connection: DatabaseConnection,
 }
