@@ -1,74 +1,12 @@
 mod db;
+mod models;
 mod nats_api;
-mod proto {
-    tonic::include_proto!("chronolens");
-}
-
+mod routes;
+use axum::{extract::DefaultBodyLimit, routing::{post, Router}};
 use db::DbAccess;
-use jsonwebtoken::{EncodingKey, Header};
-use proto::{
-    chrono_lens_server::{ChronoLens, ChronoLensServer},
-    LoginRequest, LoginResponse,
-};
-use serde::Deserialize;
-use tonic::{async_trait, transport::Server, Request, Response, Status};
-
-#[derive(Deserialize, Debug)]
-struct EnvVars {
-    #[serde(alias = "LISTEN_ON")]
-    #[serde(default = "listen_on_default")]
-    listen_on: String,
-    #[serde(alias = "JWT_SECRET")]
-    jwt_secret: String,
-}
-fn listen_on_default() -> String {
-    "0.0.0.0:8080".to_string()
-}
-
-struct ChronoLensService {
-    database: DbAccess,
-    secret: EncodingKey,
-}
-
-#[async_trait]
-impl ChronoLens for ChronoLensService {
-    async fn login(
-        &self,
-        request: Request<LoginRequest>,
-    ) -> Result<Response<LoginResponse>, Status> {
-        let login_request = request.into_inner();
-
-        let password_hash = match self.database.get_user_password(login_request.username).await {
-            Ok(pw) => pw.password,
-            Err(..) => return Err(Status::not_found("Invalid username or password")),
-        };
-
-        let matched = match bcrypt::verify(login_request.password, &password_hash) {
-            Ok(matched) => matched,
-            Err(..) => return Err(Status::not_found("Invalid username or password")),
-        };
-
-        if matched {
-            #[derive(serde::Serialize)]
-            struct Claims {
-                iat: i64,
-                nbf: i64,
-            }
-            let claims = Claims {
-                iat: chrono::offset::Local::now().timestamp_millis(),
-                nbf: chrono::offset::Local::now().timestamp_millis() + 604_800_000,
-            };
-
-            let token = match jsonwebtoken::encode(&Header::default(), &claims, &self.secret) {
-                Ok(token) => token,
-                Err(..) => panic!("Error generating JWT token"),
-            };
-            Ok(Response::new(LoginResponse { token }))
-        } else {
-            Err(Status::not_found("Invalid username or password"))
-        }
-    }
-}
+use jsonwebtoken::EncodingKey;
+use models::server_models::{EnvVars, ServerConfig};
+use routes::{login::login, upload_image::upload_image};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -83,15 +21,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Err(err) => panic!("{}", err),
     };
 
-    let addr = environment_variables.listen_on.parse()?;
-
     let secret = EncodingKey::from_secret(environment_variables.jwt_secret.as_ref());
-    let chronolens = ChronoLensService { database, secret };
 
-    Server::builder()
-        .add_service(ChronoLensServer::new(chronolens))
-        .serve(addr)
-        .await?;
+    let server_config = ServerConfig { database, secret };
+    // build our application with a route
+    let app = Router::new()
+        .route("/login", post(login))
+        .route("/image/upload", post(upload_image).route_layer(DefaultBodyLimit::max(10737418240)))
+        .with_state(server_config);
+
+    let listener = tokio::net::TcpListener::bind(environment_variables.listen_on)
+        .await
+        .unwrap();
+    axum::serve(listener, app).await.unwrap();
 
     Ok(())
 }
