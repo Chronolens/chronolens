@@ -1,0 +1,11 @@
+[package]
+name = "database"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+envy = "0.4.2"
+r2d2 = "0.8.10"
+sea-orm = { version = "1.0.1", features = ["sqlx-postgres", "runtime-tokio-rustls", "macros"] }
+serde = "1.0.210"
+tower-http = "0.6.1"
