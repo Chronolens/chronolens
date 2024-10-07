@@ -1,4 +1,5 @@
 pub mod schema;
+use migration::{Migrator, MigratorTrait};
 use schema::user;
 use sea_orm::{
     ColumnTrait, ConnectOptions, Database, DatabaseConnection, DbErr, EntityTrait, FromQueryResult,
@@ -25,11 +26,11 @@ fn default_port() -> u16 {
 }
 
 #[derive(Clone)]
-pub struct DbAccess {
+pub struct DbManager {
     pub connection: DatabaseConnection,
 }
 
-impl DbAccess {
+impl DbManager {
     pub async fn new() -> Result<Self, DbErr> {
         let db_config = envy::from_env::<DbEnvs>().unwrap();
         let connection_string = format!(
@@ -43,7 +44,8 @@ impl DbAccess {
         let mut opt = ConnectOptions::new(&connection_string);
         opt.max_connections(100).min_connections(5);
         let connection: DatabaseConnection = Database::connect(opt).await?;
-        Ok(DbAccess { connection })
+        Migrator::up(&connection,None).await?;
+        Ok(DbManager { connection })
     }
 
     pub async fn get_user_password(&self, username: String) -> Result<UserPassword, &str> {

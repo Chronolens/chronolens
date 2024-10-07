@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+migration = {path = "./migration"}
 envy = "0.4.2"
 r2d2 = "0.8.10"
 sea-orm = { version = "1.0.1", features = ["sqlx-postgres", "runtime-tokio-rustls", "macros"] }
