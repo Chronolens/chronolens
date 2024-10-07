@@ -1,7 +1,6 @@
 use jsonwebtoken::EncodingKey;
 use serde::Deserialize;
-
-use crate::db::DbAccess;
+use crate::DbAccess;
 
 #[derive(Clone)]
 pub struct ServerConfig {
