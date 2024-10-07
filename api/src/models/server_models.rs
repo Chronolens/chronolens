@@ -1,10 +1,10 @@
 use jsonwebtoken::EncodingKey;
 use serde::Deserialize;
-use crate::DbAccess;
+use crate::DbManager;
 
 #[derive(Clone)]
 pub struct ServerConfig {
-    pub database: DbAccess,
+    pub database: DbManager,
     pub secret: EncodingKey,
 }
 
