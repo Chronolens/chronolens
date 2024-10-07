@@ -26,7 +26,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let stream_name = String::from("previews");
 
     let bucket_name = "chronolens";
-    let bucket = setup_bucket(&bucket_name, "http://localhost:9000").await?;
+    let bucket = setup_bucket(bucket_name, "http://localhost:9000").await?;
     let client = match async_nats::connect(nats_addr).await {
         Ok(c) => c,
         Err(err) => panic!("Couldn't connect nats client.{err}"),
@@ -183,8 +183,7 @@ async fn setup_bucket(bucket_name: &str, endpoint: &str) -> Result<Box<Bucket>, 
         .await?
         .bucket;
     }
-    println!("yeye");
-    return Ok(bucket);
+    Ok(bucket)
 }
 
 fn create_preview(orig: DynamicImage, preview_width: u32, preview_height: u32) -> DynamicImage {
