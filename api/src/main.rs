@@ -2,7 +2,7 @@ mod utils;
 mod models;
 mod routes;
 use axum::{extract::DefaultBodyLimit, routing::{post, Router}};
-use database::DbAccess;
+use database::DbManager;
 use jsonwebtoken::EncodingKey;
 use models::server_models::{EnvVars, ServerConfig};
 use routes::{login::login, upload_image::upload_image};
@@ -15,7 +15,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Err(err) => panic!("{}", err),
     };
 
-    let database = match DbAccess::new().await {
+    let database = match DbManager::new().await {
         Ok(database) => database,
         Err(err) => panic!("{}", err),
     };
