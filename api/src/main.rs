@@ -1,9 +1,8 @@
-mod db;
+mod utils;
 mod models;
-mod nats_api;
 mod routes;
 use axum::{extract::DefaultBodyLimit, routing::{post, Router}};
-use db::DbAccess;
+use database::DbAccess;
 use jsonwebtoken::EncodingKey;
 use models::server_models::{EnvVars, ServerConfig};
 use routes::{login::login, upload_image::upload_image};

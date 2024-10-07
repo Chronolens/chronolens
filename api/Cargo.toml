@@ -1,0 +1,15 @@
+[package]
+name = "api"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+database = { path = "../database"}
+axum = { version = "0.7.7", features = ["http2", "multipart"] }
+bcrypt = "0.15.1"
+chrono = "0.4.38"
+jsonwebtoken = "9.3.0"
+serde = { version = "1.0.210", features = ["derive"] }
+tokio = { version = "1.40.0", features = ["full"] }
+dotenvy = "0.15.7"
+envy = "0.4.2"

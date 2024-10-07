@@ -1,4 +1,5 @@
-use chronolens::schema::user;
+pub mod schema;
+use schema::user;
 use sea_orm::{
     ColumnTrait, ConnectOptions, Database, DatabaseConnection, DbErr, EntityTrait, FromQueryResult,
     QueryFilter, QuerySelect,
@@ -67,3 +68,4 @@ impl DbAccess {
 pub struct UserPassword {
     pub password: String,
 }
+
