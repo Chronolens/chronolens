@@ -1,13 +1,12 @@
+use log::{error, info, warn};
 use std::error::Error;
 use std::io::Cursor;
 use std::str;
-use std::sync::Arc;
 
 use async_nats::jetstream::Message;
 use futures_util::StreamExt;
 use image::{imageops::FilterType::Triangle, DynamicImage, ImageReader};
 use s3::{creds::Credentials, error::S3Error, Bucket, BucketConfiguration, Region};
-use uuid::Uuid;
 
 // Flow to create a preview
 // 1. Get event wiht uid of image from NATS
@@ -29,7 +28,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let bucket = setup_bucket(bucket_name, "http://localhost:9000").await?;
     let client = match async_nats::connect(nats_addr).await {
         Ok(c) => c,
-        Err(err) => panic!("Couldn't connect nats client.{err}"),
+        Err(err) => {
+            error!("Couldn't connect nats client.{err}");
+            panic!("Couldn't connect nats client.{err}");
+        }
     };
 
     let jetstream = async_nats::jetstream::new(client);
@@ -66,23 +68,21 @@ async fn main() -> Result<(), Box<dyn Error>> {
         )
         .await?;
 
-    let thread_bucket = Arc::new(bucket);
     let mut messages = consumer.messages().await?;
     while let Some(message) = messages.next().await {
         match message {
             Ok(msg) => {
-                println!(
+                info!(
                     "Message received: {:?}",
                     String::from_utf8(msg.payload.to_vec())
                 );
 
                 // TODO: spawn a thread for each event
-                let thread_bucket_clone = Arc::clone(&thread_bucket);
-                tokio::spawn(async move { handle_message(msg, thread_bucket_clone).await });
+                let thread_bucket = bucket.clone();
+                tokio::spawn(async move { handle_message(msg, thread_bucket).await });
             }
-            Err(..) => {
-                println!("Error receiving message");
-                panic!();
+            Err(err) => {
+                error!("Error receiving message: {err}");
             }
         }
     }
@@ -92,12 +92,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
 // TODO: add orignal images bucket
 // redo code and break it into functions
 // test it
-async fn handle_message(msg: Message, preview_bucket: Arc<Box<Bucket>>) {
+async fn handle_message(msg: Message, preview_bucket: Box<Bucket>) {
     let payload_bytes: &[u8] = &msg.payload;
     let orig_image_id = match str::from_utf8(payload_bytes) {
         Ok(path) => path.to_owned(),
         Err(err) => {
-            println!("Couldn't convert image path into utf8: {err:?}");
+            error!("Couldn't convert image path into utf8: {err:?}");
             return;
         }
     };
@@ -105,23 +105,24 @@ async fn handle_message(msg: Message, preview_bucket: Arc<Box<Bucket>>) {
     let orig_image_response = match preview_bucket.get_object(orig_image_id.clone()).await {
         Ok(oir) => oir,
         Err(err) => {
-            println!("Get object failed: {err}");
+            error!("Get object failed: {err}");
             return;
         }
     };
 
+    // TODO: Add a step convert heif media
     let orig_reader =
         match ImageReader::new(Cursor::new(orig_image_response.as_slice())).with_guessed_format() {
             Ok(rd) => rd,
             Err(err) => {
-                println!("Couldn't convert image: {err}");
+                error!("Couldn't convert image: {err}");
                 return;
             }
         };
     let orig_image = match orig_reader.decode() {
         Ok(oi) => oi,
         Err(err) => {
-            println!("Couldn't convert image: {err}");
+            error!("Couldn't convert image: {err}");
             return;
         }
     };
@@ -136,16 +137,19 @@ async fn handle_message(msg: Message, preview_bucket: Arc<Box<Bucket>>) {
         image::ImageFormat::Jpeg,
     );
 
-    let preview_id = Uuid::new_v4().to_string();
+    // let preview_id = Uuid::new_v4().to_string();
+    let mut preview_id = orig_image_id.clone();
+    let preview_id_prefix = "prv_";
+    preview_id.insert_str(0, preview_id_prefix);
     let preview_response_data = match preview_bucket.put_object(preview_id, &preview_bytes).await {
         Ok(rp) => rp,
         Err(err) => {
-            println!("Put preview object failed with: {err}");
+            error!("Put preview object failed with: {err}");
             return;
         }
     };
     if preview_response_data.status_code() != 200 {
-        println!(
+        error!(
             "Put preview object failed with status code: {}",
             preview_response_data.status_code()
         );
@@ -156,7 +160,7 @@ async fn handle_message(msg: Message, preview_bucket: Arc<Box<Bucket>>) {
 
     match msg.ack().await {
         Ok(()) => (),
-        Err(..) => println!("Couldn't acknowledge message"),
+        Err(err) => println!("Couldn't acknowledge message {err}"),
     }
 }
 
