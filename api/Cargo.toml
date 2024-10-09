@@ -15,3 +15,9 @@ dotenvy = "0.15.7"
 envy = "0.4.2"
 rust-s3 = "0.35.1"
 uuid = { version = "1.10.0", features = ["v4", "fast-rng", "macro-diagnostics"] }
+tokio-util = "0.7.12"
+axum-extra = { version = "0.9.4", features = ["async-read-body"] }
+axum-core = "0.4.5"
+futures-util = "0.3.31"
+sha2 = "0.10.8"
+hex = "0.4.3"

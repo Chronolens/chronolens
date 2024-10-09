@@ -15,4 +15,3 @@ pub struct LoginResponse {
 pub struct UploadImageResponse {
     pub size: u64,
 }
-

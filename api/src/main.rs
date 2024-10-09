@@ -7,7 +7,8 @@ use axum::{
 };
 use database::DbManager;
 use jsonwebtoken::EncodingKey;
-use routes::{login::login, upload_image::upload_image};
+use routes::upload_image2::upload_image2;
+use routes::{login::login, upload_image::upload_image, upload_image2};
 use s3::{creds::Credentials, error::S3Error, Bucket, BucketConfiguration, Region};
 use serde::Deserialize;
 
@@ -59,9 +60,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let secret = EncodingKey::from_secret(environment_variables.jwt_secret.as_ref());
 
-    let bucket = match setup_bucket(&environment_variables)
-    .await
-    {
+    let bucket = match setup_bucket(&environment_variables).await {
         Ok(bucket) => bucket,
         Err(err) => panic!("{}", err),
     };
@@ -76,7 +75,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/login", post(login))
         .route(
             "/image/upload",
-            post(upload_image).route_layer(DefaultBodyLimit::max(10737418240)),
+            post(upload_image2).route_layer(DefaultBodyLimit::max(10737418240)),
         )
         .with_state(server_config);
 
@@ -97,10 +96,20 @@ async fn setup_bucket(envs: &EnvVars) -> Result<Box<Bucket>, S3Error> {
     // INFO: this credentials are fetched from the default location of the aws
     // credentials (~/.aws/credentials)
     //let credentials = Credentials::default().expect("Credentials died");
-    let credentials = Credentials::new(Some(&envs.object_storage_access_key), Some(&envs.object_storage_secret_key), None, None, None)?;
+    let credentials = Credentials::new(
+        Some(&envs.object_storage_access_key),
+        Some(&envs.object_storage_secret_key),
+        None,
+        None,
+        None,
+    )?;
 
-    let mut bucket =
-        Bucket::new(&envs.object_storage_bucket, region.clone(), credentials.clone())?.with_path_style();
+    let mut bucket = Bucket::new(
+        &envs.object_storage_bucket,
+        region.clone(),
+        credentials.clone(),
+    )?
+    .with_path_style();
 
     if !bucket.exists().await? {
         bucket = Bucket::create_with_path_style(
