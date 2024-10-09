@@ -1,71 +1,129 @@
-use std::time::Duration;
-
 use axum::{
-    extract::{Multipart, State},
+    extract::{multipart::Field, Multipart, State},
     http::StatusCode,
     response::{IntoResponse, Response},
     Json,
 };
 
-use tokio::time::Instant;
-
 use crate::{models::api_models::UploadImageResponse, ServerConfig};
 
+const ALLOWED_CONTENT_TYPES: [&str; 3] = ["image/png", "image/heic", "image/jpeg"];
+
 pub async fn upload_image(
-    State(_server_config): State<ServerConfig>,
+    State(server_config): State<ServerConfig>,
     mut multipart: Multipart,
 ) -> Response {
-    let message = multipart.next_field().await.unwrap();
-    let mut field = match message {
-        Some(field) => field,
-        None => return (StatusCode::BAD_REQUEST).into_response(),
-    };
+    println!("Receiving upload image request");
 
-    let file_name = field
-        .file_name()
-        .map(ToString::to_string)
-        .unwrap_or("file_name".to_owned());
-
-    let mut last_time = Instant::now(); // Time checkpoint for throughput measurements
-    let mut size = 0;
-    let mut bytes_in_last_second = 0; // Tracks bytes transferred in the last second
-
-    loop {
-        match field.chunk().await {
-            // Case when there's a new chunk of data
-            Ok(Some(data)) => {
-                let chunk_size = data.len() as u64;
-                size += chunk_size;
-                bytes_in_last_second += chunk_size;
-                println!("Chunk size: {}", chunk_size);
-
-                if last_time.elapsed() >= Duration::from_secs(1) {
-                    let elapsed = last_time.elapsed().as_secs_f64();
-                    let throughput = bytes_in_last_second as f64 / elapsed;
-                    println!("Throughput: {:.2} MB/sec", throughput / (1024.0 * 1024.0));
-
-                    last_time = Instant::now();
-                    bytes_in_last_second = 0;
-                }
-                // Add chunk to S3
-            }
-
-            // Case when there are no more chunks (end of file/stream)
-            Ok(None) => {
-                println!("Finished receiving {}", file_name);
-
-                // Add image to database
-                break;
-            }
-
-            // Case when an error occurs
-            Err(err) => {
-                println!("Error: {}", err);
+    while let Ok(Some(mut field)) = multipart
+        .next_field()
+        .await
+        .map_err(|_| StatusCode::BAD_REQUEST.into_response())
+    {
+        let file_name = match field.file_name() {
+            Some(file_name) => file_name.to_owned(),
+            None => return StatusCode::UNSUPPORTED_MEDIA_TYPE.into_response(),
+        };
+        let content_type = match field.content_type() {
+            Some(content_type) => content_type.to_owned(),
+            None => {
                 return StatusCode::BAD_REQUEST.into_response();
+            }
+        };
+        // FIX: UNCOMMENT THIS CONDITION!
+
+        //if ALLOWED_CONTENT_TYPES.contains(&content_type.as_str()) {
+        //    return StatusCode::UNSUPPORTED_MEDIA_TYPE.into_response();
+        //}
+
+        //Generate the media UUID
+        let file_uuid = uuid::Uuid::new_v4();
+
+        let Ok(multipart_upload) = server_config
+            .bucket
+            .initiate_multipart_upload(&file_uuid.to_string(), &content_type)
+            .await
+        else {
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        };
+        let mut part_number = 1;
+        let mut completed_parts = vec![];
+        let mut chunk_builder: Vec<u8> = vec![];
+
+        loop {
+            match field.chunk().await {
+                // Case when there's a new chunk of data
+                Ok(Some(data)) => {
+                    if chunk_builder.len() >= (5 * 1024 * 1024) {
+                        let Ok(upload_response) = server_config
+                            .bucket
+                            .put_multipart_chunk(
+                                chunk_builder.clone(),
+                                &file_uuid.to_string(),
+                                part_number,
+                                &multipart_upload.upload_id,
+                                &content_type,
+                            )
+                            .await
+                        else {
+                            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+                        };
+                        // Store the ETag of this part
+                        completed_parts.push(upload_response);
+                        part_number += 1;
+                        chunk_builder.clear();
+                        chunk_builder.append(&mut data.to_vec());
+                    } else {
+                        chunk_builder.append(&mut data.to_vec());
+                    }
+                }
+
+                // Case when there are no more chunks (end of file/stream)
+                Ok(None) => {
+                    println!("Finished receiving {}", file_name);
+                    let Ok(upload_response) = server_config
+                        .bucket
+                        .put_multipart_chunk(
+                            chunk_builder,
+                            &file_uuid.to_string(),
+                            part_number,
+                            &multipart_upload.upload_id,
+                            &content_type,
+                        )
+                        .await
+                    else {
+                        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+                    };
+                    completed_parts.push(upload_response);
+
+                    // Step 3: Complete multipart upload
+                    match server_config
+                        .bucket
+                        .complete_multipart_upload(
+                            &file_uuid.to_string(),
+                            &multipart_upload.upload_id,
+                            completed_parts,
+                        )
+                        .await
+                    {
+                        Err(err) => {
+                            println!("Error: {}", err);
+                            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+                        }
+                        Ok(..) => println!("Multipart upload complete for {}", file_name),
+                    };
+
+                    // TODO: Add image to db
+                    break;
+                }
+
+                // Case when an error occurs
+                Err(err) => {
+                    println!("Error: {}", err);
+                    return StatusCode::BAD_REQUEST.into_response();
+                }
             }
         }
     }
-
-
-    (StatusCode::OK, Json(UploadImageResponse { size })).into_response()
+    (StatusCode::OK, Json(UploadImageResponse { size: 64 })).into_response()
 }
