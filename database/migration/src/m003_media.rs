@@ -21,15 +21,8 @@ impl MigrationTrait for Migration {
                             .to(User::Table, User::Id),
                     )
                     .col(string_null(Media::PreviewId))
-                    .col(date_time(Media::CreatedAt))
                     .col(string(Media::Hash))
-                    .col(integer_null(Media::Duration))
-                    .col(
-                        ColumnDef::new(Media::Type)
-                            .char_len(1)
-                            .not_null()
-                            .check(Expr::col(Media::Type).is_in(["i","v"]))
-                    )
+                    .col(date_time(Media::CreatedAt))
                     .to_owned(),
             )
             .await
@@ -48,8 +41,6 @@ enum Media {
     Id,
     UserId,
     PreviewId,
-    Type,
-    CreatedAt,
     Hash,
-    Duration,
+    CreatedAt,
 }
