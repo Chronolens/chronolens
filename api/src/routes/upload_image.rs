@@ -1,5 +1,5 @@
 use axum::{
-    extract::{multipart::Field, Multipart, State},
+    extract::{Multipart, State},
     http::StatusCode,
     response::{IntoResponse, Response},
     Json,
@@ -7,7 +7,7 @@ use axum::{
 
 use crate::{models::api_models::UploadImageResponse, ServerConfig};
 
-const ALLOWED_CONTENT_TYPES: [&str; 3] = ["image/png", "image/heic", "image/jpeg"];
+//const ALLOWED_CONTENT_TYPES: [&str; 3] = ["image/png", "image/heic", "image/jpeg"];
 
 pub async fn upload_image(
     State(server_config): State<ServerConfig>,
@@ -20,6 +20,10 @@ pub async fn upload_image(
         .await
         .map_err(|_| StatusCode::BAD_REQUEST.into_response())
     {
+        let _name = match field.name() {
+            Some(name) => name.to_owned(),
+            None => return StatusCode::UNSUPPORTED_MEDIA_TYPE.into_response(),
+        };
         let file_name = match field.file_name() {
             Some(file_name) => file_name.to_owned(),
             None => return StatusCode::UNSUPPORTED_MEDIA_TYPE.into_response(),
@@ -30,6 +34,7 @@ pub async fn upload_image(
                 return StatusCode::BAD_REQUEST.into_response();
             }
         };
+
         // FIX: UNCOMMENT THIS CONDITION!
 
         //if ALLOWED_CONTENT_TYPES.contains(&content_type.as_str()) {

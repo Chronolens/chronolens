@@ -10,7 +10,7 @@ impl MigratorTrait for Migrator {
     fn migrations() -> Vec<Box<dyn MigrationTrait>> {
         vec![
             Box::new(m002_user::Migration),
-            Box::new(m003_media::Migration)
+            Box::new(m003_media::Migration),
         ]
     }
 }
