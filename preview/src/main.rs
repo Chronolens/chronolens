@@ -15,9 +15,7 @@ use s3::{creds::Credentials, error::S3Error, Bucket, BucketConfiguration, Region
 // 4. Save preview to object storage
 // 5. Update entry in database
 
-// TODO: create the server and client handling
-// connect to object storage
-// connect to database
+const CONTENT_TYPE_HEADER: &str = "ContentType";
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     // connect to nats
@@ -110,7 +108,20 @@ async fn handle_message(msg: Message, preview_bucket: Box<Bucket>) {
         }
     };
 
-    // TODO: Add a step convert heif media
+    let content_type = match orig_image_response.headers().get(CONTENT_TYPE_HEADER) {
+        Some(ct) => *ct,
+        None => {
+            warn!("No content type provided in {orig_image_id} object.");
+            String::new()
+        }
+    };
+
+    // FIX: create and add the other ios types
+    let ios_types = ["image/heif", "image/heic"];
+    if ios_types.contains(&content_type.as_str()) {
+        // TODO: decode ios type media with libheif
+    }
+
     let orig_reader =
         match ImageReader::new(Cursor::new(orig_image_response.as_slice())).with_guessed_format() {
             Ok(rd) => rd,
