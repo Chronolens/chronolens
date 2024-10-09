@@ -1,6 +1,8 @@
 pub mod schema;
+use std::str::Bytes;
+
 use migration::{Migrator, MigratorTrait};
-use schema::user;
+use schema::{media, user};
 use sea_orm::{
     ColumnTrait, ConnectOptions, Database, DatabaseConnection, DbErr, EntityTrait, FromQueryResult,
     QueryFilter, QuerySelect,
@@ -44,8 +46,23 @@ impl DbManager {
         let mut opt = ConnectOptions::new(&connection_string);
         opt.max_connections(100).min_connections(5);
         let connection: DatabaseConnection = Database::connect(opt).await?;
-        Migrator::up(&connection,None).await?;
+        Migrator::up(&connection, None).await?;
         Ok(DbManager { connection })
+    }
+
+    pub async fn query_image(&self, checksum: Vec<u8>) -> Result<bool, &str> {
+        match media::Entity::find()
+            .filter(media::Column::Hash.eq(checksum))
+            .one(&self.connection)
+            .await
+        {
+            Ok(Some(..)) => Ok(true),
+            Ok(None) => Ok(false),
+            Err(err) => {
+                println!("Err: {}", err);
+                Err("Failed to query checksum")
+            }
+        }
     }
 
     pub async fn get_user_password(&self, username: String) -> Result<UserPassword, &str> {
@@ -70,4 +87,3 @@ impl DbManager {
 pub struct UserPassword {
     pub password: String,
 }
-
