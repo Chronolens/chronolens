@@ -13,3 +13,5 @@ serde = { version = "1.0.210", features = ["derive"] }
 tokio = { version = "1.40.0", features = ["full"] }
 dotenvy = "0.15.7"
 envy = "0.4.2"
+rust-s3 = "0.35.1"
+uuid = { version = "1.10.0", features = ["v4", "fast-rng", "macro-diagnostics"] }
