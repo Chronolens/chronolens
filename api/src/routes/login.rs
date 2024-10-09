@@ -6,7 +6,10 @@ use axum::{
 };
 use jsonwebtoken::Header;
 
-use crate::{models::api_models::{LoginRequest, LoginResponse}, ServerConfig};
+use crate::{
+    models::api_models::{LoginRequest, LoginResponse},
+    ServerConfig,
+};
 
 pub async fn login(
     State(server_config): State<ServerConfig>,

@@ -21,7 +21,7 @@ impl MigrationTrait for Migration {
                             .to(User::Table, User::Id),
                     )
                     .col(string_null(Media::PreviewId))
-                    .col(string(Media::Hash))
+                    .col(binary(Media::Hash))
                     .col(date_time(Media::CreatedAt))
                     .to_owned(),
             )
