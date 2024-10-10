@@ -12,6 +12,7 @@ pub struct Model {
     #[sea_orm(column_type = "VarBinary(StringLen::None)")]
     pub hash: Vec<u8>,
     pub created_at: i64,
+    pub uploaded_at: i64,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
