@@ -22,7 +22,7 @@ impl MigrationTrait for Migration {
                     )
                     .col(string_null(Media::PreviewId))
                     .col(binary(Media::Hash))
-                    .col(date_time(Media::CreatedAt))
+                    .col(big_integer(Media::CreatedAt))
                     .to_owned(),
             )
             .await

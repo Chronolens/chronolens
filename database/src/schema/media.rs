@@ -11,7 +11,7 @@ pub struct Model {
     pub preview_id: Option<String>,
     #[sea_orm(column_type = "VarBinary(StringLen::None)")]
     pub hash: Vec<u8>,
-    pub created_at: DateTime,
+    pub created_at: i64,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
