@@ -2,20 +2,27 @@ mod models;
 mod routes;
 mod utils;
 use axum::{
-    extract::DefaultBodyLimit,
+    body::Body,
+    extract::{DefaultBodyLimit, State},
+    http::Request,
+    middleware::{self, Next},
+    response::{IntoResponse, Response},
     routing::{post, Router},
 };
+use chrono::Utc;
 use database::DbManager;
-use jsonwebtoken::EncodingKey;
+use http::StatusCode;
+use jsonwebtoken::{decode, DecodingKey, Validation};
+use models::api_models::TokenClaims;
+use routes::login::login;
 use routes::upload_image2::upload_image2;
-use routes::{login::login, upload_image::upload_image, upload_image2};
 use s3::{creds::Credentials, error::S3Error, Bucket, BucketConfiguration, Region};
 use serde::Deserialize;
 
 #[derive(Clone)]
 pub struct ServerConfig {
     pub database: DbManager,
-    pub secret: EncodingKey,
+    pub secret: String,
     pub bucket: Box<Bucket>,
 }
 
@@ -58,7 +65,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Err(err) => panic!("{}", err),
     };
 
-    let secret = EncodingKey::from_secret(environment_variables.jwt_secret.as_ref());
+    let secret = environment_variables.jwt_secret.clone();
 
     let bucket = match setup_bucket(&environment_variables).await {
         Ok(bucket) => bucket,
@@ -71,17 +78,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         bucket,
     };
     // build our application with a route
-    let app = Router::new()
-        .route("/login", post(login))
+    let public_routes = Router::new().route("/login", post(login));
+
+    let private_routes = Router::new()
         .route(
             "/image/upload",
             post(upload_image2).route_layer(DefaultBodyLimit::max(10737418240)),
         )
-        .with_state(server_config);
+        .layer(middleware::from_fn_with_state(
+            server_config.secret.clone(),
+            auth_middleware,
+        ));
 
     let listener = tokio::net::TcpListener::bind(&environment_variables.listen_on)
         .await
         .unwrap();
+
+    let app = public_routes
+        .merge(private_routes)
+        .with_state(server_config);
     axum::serve(listener, app).await.unwrap();
 
     Ok(())
@@ -93,7 +108,7 @@ async fn setup_bucket(envs: &EnvVars) -> Result<Box<Bucket>, S3Error> {
         region: "eu-central-1".to_string(),
         endpoint: envs.object_storage_endpoint.to_string(),
     };
-    // INFO: this credentials are fetched from the default location of the aws
+    // INFO: these credentials are fetched from the default location of the aws
     // credentials (~/.aws/credentials)
     //let credentials = Credentials::default().expect("Credentials died");
     let credentials = Credentials::new(
@@ -122,4 +137,43 @@ async fn setup_bucket(envs: &EnvVars) -> Result<Box<Bucket>, S3Error> {
         .bucket;
     }
     Ok(bucket)
+}
+
+async fn auth_middleware(
+    State(secret): State<String>,
+    mut req: Request<Body>,
+    next: Next,
+) -> Response {
+    let authorization_header = match req.headers_mut().get(http::header::AUTHORIZATION) {
+        Some(header) => header,
+        None => return (StatusCode::UNAUTHORIZED, "No authorization header found").into_response(),
+    };
+    let mut authorization_header_str = match authorization_header.to_str() {
+        Ok(token) => token.split_whitespace(),
+        Err(..) => {
+            return (StatusCode::UNAUTHORIZED, "Authorization header is empty").into_response()
+        }
+    };
+
+    let (_,jwt_header) = (authorization_header_str.next(),authorization_header_str.next());
+
+    let secret = &DecodingKey::from_secret(secret.as_ref());
+
+    let result = match decode::<TokenClaims>(
+        jwt_header.unwrap(),
+        secret,
+        &Validation::new(jsonwebtoken::Algorithm::HS256),
+    ) {
+        Ok(token) => token,
+        Err(err) => return (StatusCode::UNAUTHORIZED, format!("Could not decode JWT token {}",err)).into_response(),
+    };
+
+    let now = Utc::now().timestamp_millis();
+    if now < result.claims.iat || now > result.claims.exp {
+        return (StatusCode::UNAUTHORIZED, "Authorization header is invalid").into_response();
+    }
+
+    req.extensions_mut().insert(result.claims.user_id);
+
+    next.run(req).await
 }
