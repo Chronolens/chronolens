@@ -1,40 +1,62 @@
+use base64::Engine;
 use axum::{
     extract::{Multipart, State},
     http::StatusCode,
     response::{IntoResponse, Response},
-    Json,
+    Extension,
 };
+use base64::engine::general_purpose;
+use http::{header::CONTENT_TYPE, HeaderMap};
 
-use crate::{models::api_models::UploadImageResponse, ServerConfig};
+use crate::ServerConfig;
 
 //const ALLOWED_CONTENT_TYPES: [&str; 3] = ["image/png", "image/heic", "image/jpeg"];
 
 pub async fn upload_image(
     State(server_config): State<ServerConfig>,
+    Extension(user_id): Extension<String>,
+    headers: HeaderMap,
     mut multipart: Multipart,
 ) -> Response {
-    println!("Receiving upload image request");
+    let digest = match get_content_digest(&headers) {
+        Ok(digest) => digest,
+        Err(response) => return response,
+    };
+
+    let content_type = match headers.get(CONTENT_TYPE).and_then(|ct| ct.to_str().ok()) {
+        Some(ct) => ct,
+        None => {
+            return (
+                StatusCode::BAD_REQUEST,
+                "Content-Type header could not be decoded or does not exist",
+            )
+                .into_response()
+        }
+    };
+
+    let image_exists = match server_config
+        .database
+        .query_media(user_id.clone(), digest.clone())
+        .await
+    {
+        Ok(exists) => exists,
+        Err(..) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    };
+
+    if image_exists {
+        println!("Image already exists");
+        return (
+            StatusCode::BAD_REQUEST,
+            "Image already exists on the server",
+        )
+            .into_response();
+    }
 
     while let Ok(Some(mut field)) = multipart
         .next_field()
         .await
         .map_err(|_| StatusCode::BAD_REQUEST.into_response())
     {
-        let _name = match field.name() {
-            Some(name) => name.to_owned(),
-            None => return StatusCode::UNSUPPORTED_MEDIA_TYPE.into_response(),
-        };
-        let file_name = match field.file_name() {
-            Some(file_name) => file_name.to_owned(),
-            None => return StatusCode::UNSUPPORTED_MEDIA_TYPE.into_response(),
-        };
-        let content_type = match field.content_type() {
-            Some(content_type) => content_type.to_owned(),
-            None => {
-                return StatusCode::BAD_REQUEST.into_response();
-            }
-        };
-
         // FIX: UNCOMMENT THIS CONDITION!
 
         //if ALLOWED_CONTENT_TYPES.contains(&content_type.as_str()) {
@@ -85,7 +107,7 @@ pub async fn upload_image(
 
                 // Case when there are no more chunks (end of file/stream)
                 Ok(None) => {
-                    println!("Finished receiving {}", file_name);
+                    println!("Finished receiving file");
                     let Ok(upload_response) = server_config
                         .bucket
                         .put_multipart_chunk(
@@ -115,7 +137,24 @@ pub async fn upload_image(
                             println!("Error: {}", err);
                             return StatusCode::INTERNAL_SERVER_ERROR.into_response();
                         }
-                        Ok(..) => println!("Multipart upload complete for {}", file_name),
+                        Ok(..) => {
+                            match server_config
+                                .database
+                                .add_media(user_id.clone(), file_uuid.to_string(), digest.clone())
+                                .await
+                            {
+                                Ok(_) => println!("Multipart upload complete"),
+                                _ => {
+                                    //If adding to the DB fails, remove the file from the object storage
+                                    server_config
+                                        .bucket
+                                        .delete_object(file_uuid.to_string())
+                                        .await
+                                        .unwrap();
+                                    return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+                                }
+                            }
+                        }
                     };
 
                     // TODO: Add image to db
@@ -130,5 +169,40 @@ pub async fn upload_image(
             }
         }
     }
-    (StatusCode::OK, Json(UploadImageResponse { size: 64 })).into_response()
+    StatusCode::OK.into_response()
+}
+fn get_content_digest(headers: &HeaderMap) -> Result<Vec<u8>, Response> {
+    let checksum_header = match headers.get("Content-Digest") {
+        Some(header) => header.to_str().unwrap(),
+        None => {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                "No checksum for body found in headers (Content-Digest)",
+            )
+                .into_response())
+        }
+    };
+
+    let encoded_digest = match checksum_header
+        .strip_prefix("sha-256=:")
+        .and_then(|checksum| checksum.strip_suffix(":"))
+    {
+        Some(checksum) => checksum.to_string(),
+        None => {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                "Invalid checksum format, please use 'sha-256=:base64_hash_here:'",
+            )
+                .into_response())
+        }
+    };
+
+    match general_purpose::STANDARD.decode(encoded_digest) {
+        Ok(digest) => Ok(digest),
+        Err(_) => Err((
+            StatusCode::BAD_REQUEST,
+            "No checksum for body found in headers (Content-Digest)",
+        )
+            .into_response()),
+    }
 }
