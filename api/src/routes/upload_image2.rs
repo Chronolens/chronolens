@@ -1,4 +1,3 @@
-
 use crate::ServerConfig;
 use axum::extract::Request;
 use axum::response::Response;
@@ -28,6 +27,20 @@ pub async fn upload_image2(
                 "Content-Type header could not be decoded or does not exist",
             )
                 .into_response()
+        }
+    };
+
+    let timestamp = match headers
+        .get("Timestamp")
+        .and_then(|ts| ts.to_str().ok())
+        .and_then(|ts| ts.parse::<i64>().ok())
+    {
+        Some(ts) => ts,
+        None => {
+            return (
+                StatusCode::BAD_REQUEST,
+                "Timestamp header missing or invalid format",
+            ).into_response()
         }
     };
 
@@ -128,7 +141,7 @@ pub async fn upload_image2(
         Ok(..) => {
             let Ok(_) = server_config
                 .database
-                .add_media(user_id, file_uuid.to_string(), digest)
+                .add_media(user_id, file_uuid.to_string(), digest,timestamp)
                 .await
             else {
                 //If adding to the DB fails, remove the file from the object storage

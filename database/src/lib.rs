@@ -1,7 +1,10 @@
 pub mod schema;
 
 use migration::{Migrator, MigratorTrait};
-use schema::{media::{self, ActiveModel}, user};
+use schema::{
+    media::{self, ActiveModel},
+    user,
+};
 use sea_orm::{
     entity::*, query::*, sqlx::types::chrono::Utc, ColumnTrait, ConnectOptions, Database,
     DatabaseConnection, DbErr, EntityTrait, QueryFilter,
@@ -70,18 +73,17 @@ impl DbManager {
         user_id: String,
         media_id: String,
         checksum: Vec<u8>,
-    ) -> Result<InsertResult<ActiveModel>, DbErr>
-    {
+        timestamp: i64,
+    ) -> Result<InsertResult<ActiveModel>, DbErr> {
         let media_to_insert = media::ActiveModel {
             id: Set(media_id),
             user_id: Set(user_id),
             preview_id: Set(None),
             hash: Set(checksum),
-            // FIX: THE CREATION DATE NEEDS TO BE SENT BY THE CLIENT
-            // NEED TO REPLACE THIS
-            created_at: Set(Utc::now().timestamp_millis()),
+            created_at: Set(timestamp),
+            uploaded_at: Set(Utc::now().timestamp_millis()),
         };
-        
+
         media::Entity::insert(media_to_insert)
             .exec(&self.connection)
             .await

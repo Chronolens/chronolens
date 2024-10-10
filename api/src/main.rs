@@ -14,8 +14,7 @@ use database::DbManager;
 use http::StatusCode;
 use jsonwebtoken::{decode, DecodingKey, Validation};
 use models::api_models::TokenClaims;
-use routes::login::login;
-use routes::upload_image2::upload_image2;
+use routes::{login::login, upload_image::upload_image};
 use s3::{creds::Credentials, error::S3Error, Bucket, BucketConfiguration, Region};
 use serde::Deserialize;
 
@@ -83,7 +82,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let private_routes = Router::new()
         .route(
             "/image/upload",
-            post(upload_image2).route_layer(DefaultBodyLimit::max(10737418240)),
+            post(upload_image).route_layer(DefaultBodyLimit::max(10737418240)),
         )
         .layer(middleware::from_fn_with_state(
             server_config.secret.clone(),
@@ -155,7 +154,10 @@ async fn auth_middleware(
         }
     };
 
-    let (_,jwt_header) = (authorization_header_str.next(),authorization_header_str.next());
+    let (_, jwt_header) = (
+        authorization_header_str.next(),
+        authorization_header_str.next(),
+    );
 
     let secret = &DecodingKey::from_secret(secret.as_ref());
 
@@ -165,7 +167,13 @@ async fn auth_middleware(
         &Validation::new(jsonwebtoken::Algorithm::HS256),
     ) {
         Ok(token) => token,
-        Err(err) => return (StatusCode::UNAUTHORIZED, format!("Could not decode JWT token {}",err)).into_response(),
+        Err(err) => {
+            return (
+                StatusCode::UNAUTHORIZED,
+                format!("Could not decode JWT token {}", err),
+            )
+                .into_response()
+        }
     };
 
     let now = Utc::now().timestamp_millis();
