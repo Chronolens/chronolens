@@ -23,6 +23,7 @@ impl MigrationTrait for Migration {
                     .col(string_null(Media::PreviewId))
                     .col(binary(Media::Hash))
                     .col(big_integer(Media::CreatedAt))
+                    .col(big_integer(Media::UploadedAt))
                     .to_owned(),
             )
             .await
@@ -43,4 +44,5 @@ enum Media {
     PreviewId,
     Hash,
     CreatedAt,
+    UploadedAt,
 }
