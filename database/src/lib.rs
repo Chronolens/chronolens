@@ -1,11 +1,10 @@
 pub mod schema;
-use std::str::Bytes;
 
 use migration::{Migrator, MigratorTrait};
-use schema::{media, user};
+use schema::{media::{self, ActiveModel}, user};
 use sea_orm::{
-    ColumnTrait, ConnectOptions, Database, DatabaseConnection, DbErr, EntityTrait, FromQueryResult,
-    QueryFilter, QuerySelect,
+    entity::*, query::*, sqlx::types::chrono::Utc, ColumnTrait, ConnectOptions, Database,
+    DatabaseConnection, DbErr, EntityTrait, QueryFilter,
 };
 use serde::Deserialize;
 
@@ -50,9 +49,10 @@ impl DbManager {
         Ok(DbManager { connection })
     }
 
-    pub async fn query_image(&self, checksum: Vec<u8>) -> Result<bool, &str> {
+    pub async fn query_media(&self, user_id: String, checksum: Vec<u8>) -> Result<bool, &str> {
         match media::Entity::find()
             .filter(media::Column::Hash.eq(checksum))
+            .filter(media::Column::UserId.eq(user_id))
             .one(&self.connection)
             .await
         {
@@ -65,25 +65,39 @@ impl DbManager {
         }
     }
 
-    pub async fn get_user_password(&self, username: String) -> Result<UserPassword, &str> {
+    pub async fn add_media(
+        &self,
+        user_id: String,
+        media_id: String,
+        checksum: Vec<u8>,
+    ) -> Result<InsertResult<ActiveModel>, DbErr>
+    {
+        let media_to_insert = media::ActiveModel {
+            id: Set(media_id),
+            user_id: Set(user_id),
+            preview_id: Set(None),
+            hash: Set(checksum),
+            // FIX: THE CREATION DATE NEEDS TO BE SENT BY THE CLIENT
+            // NEED TO REPLACE THIS
+            created_at: Set(Utc::now().timestamp_millis()),
+        };
+        
+        media::Entity::insert(media_to_insert)
+            .exec(&self.connection)
+            .await
+    }
+
+    pub async fn get_user(&self, username: String) -> Result<user::Model, &str> {
         match user::Entity::find()
-            .select_only()
-            .column(user::Column::Password)
             .filter(user::Column::Username.eq(username))
-            .into_model::<UserPassword>()
             .one(&self.connection)
             .await
         {
-            Ok(password_hash) => Ok(password_hash.expect("Username or password not found")),
+            Ok(user) => Ok(user.expect("Username not found")),
             Err(err) => {
                 println!("Err: {}", err);
-                Err("Failed to get user password")
+                Err("Failed to get user")
             }
         }
     }
-}
-
-#[derive(Debug, FromQueryResult)]
-pub struct UserPassword {
-    pub password: String,
 }

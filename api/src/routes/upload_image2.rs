@@ -1,25 +1,41 @@
-use axum::{body::Body, extract::State, http::StatusCode, response::IntoResponse};
-use futures_util::StreamExt;
 
 use crate::ServerConfig;
+use axum::extract::Request;
+use axum::response::Response;
+use axum::{extract::State, http::StatusCode, response::IntoResponse, Extension};
+use base64::engine::general_purpose;
+use base64::Engine;
+use futures_util::StreamExt;
+use http::header::CONTENT_TYPE;
+use http::HeaderMap;
 
 pub async fn upload_image2(
     State(server_config): State<ServerConfig>,
-    body: Body,
+    Extension(user_id): Extension<String>,
+    headers: HeaderMap,
+    request: Request,
 ) -> impl IntoResponse {
-    println!("Receiving file");
-
-    //Get the first chunk
-    let mut stream = body.into_data_stream();
-    let first_chunk = match stream.next().await {
-        Some(Ok(chunk)) => chunk,
-        Some(Err(..)) => return StatusCode::BAD_REQUEST.into_response(),
-        None => return StatusCode::BAD_REQUEST.into_response(),
+    let digest = match get_content_digest(&headers) {
+        Ok(digest) => digest,
+        Err(response) => return response,
     };
 
-    let (checksum, first_file_chunk) = first_chunk.split_at(32);
+    let content_type = match headers.get(CONTENT_TYPE).and_then(|ct| ct.to_str().ok()) {
+        Some(ct) => ct,
+        None => {
+            return (
+                StatusCode::BAD_REQUEST,
+                "Content-Type header could not be decoded or does not exist",
+            )
+                .into_response()
+        }
+    };
 
-    let image_exists = match server_config.database.query_image(checksum.to_vec()).await {
+    let image_exists = match server_config
+        .database
+        .query_media(user_id.clone(), digest.clone())
+        .await
+    {
         Ok(exists) => exists,
         Err(..) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     };
@@ -37,7 +53,7 @@ pub async fn upload_image2(
 
     let Ok(multipart_upload) = server_config
         .bucket
-        .initiate_multipart_upload(&file_uuid.to_string(), "image/png")
+        .initiate_multipart_upload(&file_uuid.to_string(), content_type)
         .await
     else {
         return StatusCode::INTERNAL_SERVER_ERROR.into_response();
@@ -45,9 +61,9 @@ pub async fn upload_image2(
     let mut part_number = 1;
     let mut completed_parts = vec![];
     let mut chunk_builder: Vec<u8> = vec![];
-    chunk_builder.append(&mut first_file_chunk.to_vec());
 
     // Process each chunk as soon as it arrives without accumulating chunks in memory
+    let mut stream = request.into_body().into_data_stream();
     while let Some(chunk_result) = stream.next().await {
         match chunk_result {
             Ok(chunk) => {
@@ -60,7 +76,7 @@ pub async fn upload_image2(
                             &file_uuid.to_string(),
                             part_number,
                             &multipart_upload.upload_id,
-                            "image/png",
+                            content_type,
                         )
                         .await
                     else {
@@ -75,12 +91,13 @@ pub async fn upload_image2(
                     chunk_builder.append(&mut chunk.to_vec());
                 }
             }
-            Err(_) => {
+            Err(..) => {
                 // Handle the error if reading the chunk fails
                 return StatusCode::BAD_REQUEST.into_response();
             }
         }
     }
+
     let Ok(upload_response) = server_config
         .bucket
         .put_multipart_chunk(
@@ -88,7 +105,7 @@ pub async fn upload_image2(
             &file_uuid.to_string(),
             part_number,
             &multipart_upload.upload_id,
-            "image/png",
+            content_type,
         )
         .await
     else {
@@ -105,12 +122,61 @@ pub async fn upload_image2(
         )
         .await
     {
-        Err(err) => {
-            println!("Error: {}", err);
+        Err(..) => {
             return StatusCode::INTERNAL_SERVER_ERROR.into_response();
         }
-        Ok(..) => println!("Multipart upload complete"),
+        Ok(..) => {
+            let Ok(_) = server_config
+                .database
+                .add_media(user_id, file_uuid.to_string(), digest)
+                .await
+            else {
+                //If adding to the DB fails, remove the file from the object storage
+                server_config
+                    .bucket
+                    .delete_object(file_uuid.to_string())
+                    .await
+                    .unwrap();
+                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+            };
+        }
     };
 
     StatusCode::OK.into_response()
+}
+
+fn get_content_digest(headers: &HeaderMap) -> Result<Vec<u8>, Response> {
+    let checksum_header = match headers.get("Content-Digest") {
+        Some(header) => header.to_str().unwrap(),
+        None => {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                "No checksum for body found in headers (Content-Digest)",
+            )
+                .into_response())
+        }
+    };
+
+    let encoded_digest = match checksum_header
+        .strip_prefix("sha-256=:")
+        .and_then(|checksum| checksum.strip_suffix(":"))
+    {
+        Some(checksum) => checksum.to_string(),
+        None => {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                "Invalid checksum format, please use 'sha-256=:base64_hash_here:'",
+            )
+                .into_response())
+        }
+    };
+
+    match general_purpose::STANDARD.decode(encoded_digest) {
+        Ok(digest) => Ok(digest),
+        Err(_) => Err((
+            StatusCode::BAD_REQUEST,
+            "No checksum for body found in headers (Content-Digest)",
+        )
+            .into_response()),
+    }
 }
