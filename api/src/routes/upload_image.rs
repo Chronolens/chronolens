@@ -10,7 +10,7 @@
 //
 //use crate::ServerConfig;
 //
-////const ALLOWED_CONTENT_TYPES: [&str; 3] = ["image/png", "image/heic", "image/jpeg"];
+//const ALLOWED_CONTENT_TYPES: [&str; 3] = ["image/png", "image/heic", "image/jpeg"];
 //
 //pub async fn upload_image(
 //    State(server_config): State<ServerConfig>,
@@ -224,8 +224,6 @@ use crate::ServerConfig;
 use axum::extract::Request;
 use axum::response::Response;
 use axum::{extract::State, http::StatusCode, response::IntoResponse, Extension};
-use base64::engine::general_purpose;
-use base64::Engine;
 use futures_util::StreamExt;
 use http::header::CONTENT_TYPE;
 use http::HeaderMap;
@@ -380,7 +378,7 @@ pub async fn upload_image(
     StatusCode::OK.into_response()
 }
 
-fn get_content_digest(headers: &HeaderMap) -> Result<Vec<u8>, Response> {
+fn get_content_digest(headers: &HeaderMap) -> Result<String, Response> {
     let checksum_header = match headers.get("Content-Digest") {
         Some(header) => header.to_str().unwrap(),
         None => {
@@ -392,26 +390,17 @@ fn get_content_digest(headers: &HeaderMap) -> Result<Vec<u8>, Response> {
         }
     };
 
-    let encoded_digest = match checksum_header
+    match checksum_header
         .strip_prefix("sha-256=:")
         .and_then(|checksum| checksum.strip_suffix(":"))
     {
-        Some(checksum) => checksum.to_string(),
+        Some(checksum) => Ok(checksum.to_string()),
         None => {
-            return Err((
+            Err((
                 StatusCode::BAD_REQUEST,
                 "Invalid checksum format, please use 'sha-256=:base64_hash_here:'",
             )
                 .into_response())
         }
-    };
-
-    match general_purpose::STANDARD.decode(encoded_digest) {
-        Ok(digest) => Ok(digest),
-        Err(_) => Err((
-            StatusCode::BAD_REQUEST,
-            "No checksum for body found in headers (Content-Digest)",
-        )
-            .into_response()),
     }
 }
