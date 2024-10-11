@@ -92,9 +92,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     return Ok(());
 }
 
-// TODO: add orignal images bucket
-// redo code and break it into functions
-// test it
+// TODO: change to env vars
 async fn handle_message(msg: Message, bucket: Box<Bucket>, db: DbManager) {
     let payload_bytes: &[u8] = &msg.payload;
     let orig_image_id = match str::from_utf8(payload_bytes) {
@@ -157,7 +155,7 @@ async fn handle_message(msg: Message, bucket: Box<Bucket>, db: DbManager) {
     let mut preview_id = orig_image_id.clone();
     let preview_id_prefix = "prv_";
     preview_id.insert_str(0, preview_id_prefix);
-    let preview_response_data = match bucket.put_object(preview_id, &preview_bytes).await {
+    let preview_response_data = match bucket.put_object(&preview_id, &preview_bytes).await {
         Ok(rp) => rp,
         Err(err) => {
             error!("Put preview object failed with: {err}");
@@ -172,7 +170,10 @@ async fn handle_message(msg: Message, bucket: Box<Bucket>, db: DbManager) {
         return;
     }
 
-    // TODO: db update
+    if let Err(err) = db.update_media_preview(orig_image_id, preview_id).await {
+        error!("{err}");
+        return;
+    }
 
     match msg.ack().await {
         Ok(()) => (),
