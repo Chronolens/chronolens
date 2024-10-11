@@ -152,6 +152,26 @@ impl DbManager {
             }
         }
     }
+
+    pub async fn sync_partial(&self, user_id: String,since: i64) -> Result<Vec<RemoteMedia>, &str> {
+        match media::Entity::find()
+            .select_only()
+            .select_column(media::Column::Id)
+            .select_column(media::Column::CreatedAt)
+            .select_column(media::Column::Hash)
+            .filter(media::Column::UserId.eq(user_id))
+            .filter(media::Column::UploadedAt.gt(since))
+            .into_model::<RemoteMedia>()
+            .all(&self.connection)
+            .await
+        {
+            Ok(user) => Ok(user),
+            Err(err) => {
+                println!("Err: {}", err);
+                Err("Failed to get media")
+            }
+        }
+    }
 }
 
 #[derive(Deserialize, Debug, Clone, FromQueryResult)]
