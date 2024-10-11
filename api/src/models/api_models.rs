@@ -19,6 +19,7 @@ pub struct LoginResponse {
 }
 
 #[derive(Serialize)]
-pub struct UploadImageResponse {
-    pub size: u64,
+pub struct SyncFullResponse {
+    pub id: String,
+    pub created_at: i64,
 }

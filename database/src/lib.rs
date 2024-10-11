@@ -7,7 +7,7 @@ use schema::{
 };
 use sea_orm::{
     entity::*, query::*, sqlx::types::chrono::Utc, ColumnTrait, ConnectOptions, Database,
-    DatabaseConnection, DbErr, EntityTrait, QueryFilter,
+    DatabaseConnection, DbErr, EntityTrait, FromQueryResult, QueryFilter,
 };
 use serde::Deserialize;
 
@@ -52,7 +52,7 @@ impl DbManager {
         Ok(DbManager { connection })
     }
 
-    pub async fn query_media(&self, user_id: String, checksum: Vec<u8>) -> Result<bool, &str> {
+    pub async fn query_media(&self, user_id: String, checksum: String) -> Result<bool, &str> {
         match media::Entity::find()
             .filter(media::Column::Hash.eq(checksum))
             .filter(media::Column::UserId.eq(user_id))
@@ -72,7 +72,7 @@ impl DbManager {
         &self,
         user_id: String,
         media_id: String,
-        checksum: Vec<u8>,
+        checksum: String,
         timestamp: i64,
     ) -> Result<InsertResult<ActiveModel>, DbErr> {
         let media_to_insert = media::ActiveModel {
@@ -133,4 +133,30 @@ impl DbManager {
             )),
         }
     }
+
+    pub async fn sync_full(&self, user_id: String) -> Result<Vec<RemoteMedia>, &str> {
+        match media::Entity::find()
+            .select_only()
+            .select_column(media::Column::Id)
+            .select_column(media::Column::CreatedAt)
+            .select_column(media::Column::Hash)
+            .filter(media::Column::UserId.eq(user_id))
+            .into_model::<RemoteMedia>()
+            .all(&self.connection)
+            .await
+        {
+            Ok(user) => Ok(user),
+            Err(err) => {
+                println!("Err: {}", err);
+                Err("Failed to get media")
+            }
+        }
+    }
+}
+
+#[derive(Deserialize, Debug, Clone, FromQueryResult)]
+pub struct RemoteMedia {
+    pub id: String,
+    pub created_at: i64,
+    pub hash: String,
 }
