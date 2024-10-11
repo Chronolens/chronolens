@@ -102,4 +102,24 @@ impl DbManager {
             }
         }
     }
+    pub async fn update_media_preview(
+        &self,
+        media_id: String,
+        preview_id: String,
+    ) -> Result<(), &str> {
+        let Ok(media) = media::Entity::find_by_id(media_id)
+            .one(&self.connection)
+            .await
+        else {
+            return Err(format!("Database error while fetching media: {media_id}").as_str());
+        };
+        let Some(media) = media else {
+            return Err(format!("Could not find media: {media_id} in the database").as_str());
+        };
+        let mut media: media::ActiveModel = media.into();
+        // should i rewrite this no matter what?
+        media.preview_id = Set(preview_id);
+
+        return Ok(());
+    }
 }

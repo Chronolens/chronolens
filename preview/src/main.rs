@@ -4,6 +4,7 @@ use std::io::Cursor;
 use std::str;
 
 use async_nats::jetstream::Message;
+use database::DbManager;
 use futures_util::StreamExt;
 use image::{imageops::FilterType::Triangle, DynamicImage, ImageReader};
 use s3::{creds::Credentials, error::S3Error, Bucket, BucketConfiguration, Region};
@@ -18,16 +19,19 @@ use s3::{creds::Credentials, error::S3Error, Bucket, BucketConfiguration, Region
 const CONTENT_TYPE_HEADER: &str = "ContentType";
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    // connect to nats
     let nats_addr = "localhost:4222";
     let stream_name = String::from("previews");
+
+    let db = match DbManager::new().await {
+        Ok(database) => database,
+        Err(err) => panic!("{}", err),
+    };
 
     let bucket_name = "chronolens";
     let bucket = setup_bucket(bucket_name, "http://localhost:9000").await?;
     let client = match async_nats::connect(nats_addr).await {
         Ok(c) => c,
         Err(err) => {
-            error!("Couldn't connect nats client.{err}");
             panic!("Couldn't connect nats client.{err}");
         }
     };
@@ -77,7 +81,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
                 // TODO: spawn a thread for each event
                 let thread_bucket = bucket.clone();
-                tokio::spawn(async move { handle_message(msg, thread_bucket).await });
+                let thread_db = db.clone();
+                tokio::spawn(async move { handle_message(msg, thread_bucket, thread_db).await });
             }
             Err(err) => {
                 error!("Error receiving message: {err}");
@@ -90,7 +95,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 // TODO: add orignal images bucket
 // redo code and break it into functions
 // test it
-async fn handle_message(msg: Message, preview_bucket: Box<Bucket>) {
+async fn handle_message(msg: Message, bucket: Box<Bucket>, db: DbManager) {
     let payload_bytes: &[u8] = &msg.payload;
     let orig_image_id = match str::from_utf8(payload_bytes) {
         Ok(path) => path.to_owned(),
@@ -100,7 +105,7 @@ async fn handle_message(msg: Message, preview_bucket: Box<Bucket>) {
         }
     };
 
-    let orig_image_response = match preview_bucket.get_object(orig_image_id.clone()).await {
+    let orig_image_response = match bucket.get_object(orig_image_id.clone()).await {
         Ok(oir) => oir,
         Err(err) => {
             error!("Get object failed: {err}");
@@ -152,7 +157,7 @@ async fn handle_message(msg: Message, preview_bucket: Box<Bucket>) {
     let mut preview_id = orig_image_id.clone();
     let preview_id_prefix = "prv_";
     preview_id.insert_str(0, preview_id_prefix);
-    let preview_response_data = match preview_bucket.put_object(preview_id, &preview_bytes).await {
+    let preview_response_data = match bucket.put_object(preview_id, &preview_bytes).await {
         Ok(rp) => rp,
         Err(err) => {
             error!("Put preview object failed with: {err}");
