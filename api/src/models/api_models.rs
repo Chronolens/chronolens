@@ -19,7 +19,7 @@ pub struct LoginResponse {
 }
 
 #[derive(Serialize)]
-pub struct SyncFullResponse {
+pub struct SyncResponse {
     pub id: String,
     pub created_at: i64,
 }
