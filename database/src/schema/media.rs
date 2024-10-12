@@ -11,7 +11,8 @@ pub struct Model {
     pub preview_id: Option<String>,
     pub hash: String,
     pub created_at: i64,
-    pub uploaded_at: i64,
+    pub last_modified_at: i64,
+    pub deleted: bool,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

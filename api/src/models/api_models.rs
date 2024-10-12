@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize,Deserialize)]
@@ -19,7 +21,19 @@ pub struct LoginResponse {
 }
 
 #[derive(Serialize)]
-pub struct SyncResponse {
+pub struct FullSyncResponse {
     pub id: String,
     pub created_at: i64,
+}
+
+#[derive(Serialize)]
+pub struct MediaAddedResponse {
+    pub id: String,
+    pub created_at: i64,
+}
+
+#[derive(Serialize)]
+pub struct PartialSyncResponse {
+    pub uploaded: HashMap<String,MediaAddedResponse>,
+    pub deleted: Vec<String>
 }

@@ -15,9 +15,7 @@ use http::StatusCode;
 use jsonwebtoken::{decode, DecodingKey, Validation};
 use models::api_models::TokenClaims;
 use routes::{
-    login::login,
-    sync_full::sync_full,
-    upload_image::upload_image,
+    login::login, preview::preview, sync_full::sync_full, upload_image::upload_image
 };
 use s3::{creds::Credentials, error::S3Error, Bucket, BucketConfiguration, Region};
 use serde::Deserialize;
@@ -89,6 +87,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             post(upload_image).route_layer(DefaultBodyLimit::max(10737418240)),
         )
         .route("/sync/full", get(sync_full))
+        .route("/preview/:media_id", get(preview))
         .layer(middleware::from_fn_with_state(
             server_config.secret.clone(),
             auth_middleware,
