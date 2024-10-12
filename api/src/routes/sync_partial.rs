@@ -7,51 +7,57 @@ use axum::{
 };
 use http::{HeaderMap, StatusCode};
 
-use crate::{models::api_models::SyncResponse, ServerConfig};
+use crate::{
+    models::api_models::{MediaAddedResponse, PartialSyncResponse},
+    ServerConfig,
+};
 
 pub async fn sync_partial(
     State(server_config): State<ServerConfig>,
     Extension(user_id): Extension<String>,
     headers: HeaderMap,
 ) -> Response {
-
-    
     let since = match headers.get("Since").and_then(|ct| ct.to_str().ok()) {
-        Some(since) => match since.parse::<i64>(){
+        Some(since) => match since.parse::<i64>() {
             Ok(since) => since,
-            Err(..) => 
-            return (
-                StatusCode::BAD_REQUEST,
-                "Since header could not be decoded"
-            )
-                .into_response()
-
+            Err(..) => {
+                return (StatusCode::BAD_REQUEST, "Since header could not be decoded")
+                    .into_response()
+            }
         },
-        None => {
-            return (
-                StatusCode::BAD_REQUEST,
-                "Since header does not exist",
-            )
-                .into_response()
-        }
+        None => return (StatusCode::BAD_REQUEST, "Since header does not exist").into_response(),
     };
 
-    let remote_media = match server_config.database.sync_partial(user_id,since).await {
-        Ok(media) => media,
-        Err(..) => return (StatusCode::INTERNAL_SERVER_ERROR).into_response(),
-    };
+    let (media_uploaded, media_deleted) =
+        match server_config.database.sync_partial(user_id, since).await {
+            Ok(media) => media,
+            Err(..) => return (StatusCode::INTERNAL_SERVER_ERROR).into_response(),
+        };
 
-    let mut partial_full_response: HashMap<String, SyncResponse> = HashMap::new();
+    let mut media_uploaded_map: HashMap<String, MediaAddedResponse> = HashMap::new();
+    let mut media_deleted_map: Vec<String> = vec![];
 
-    remote_media.into_iter().for_each(|media| {
-        partial_full_response.insert(
-            media.hash,
-            SyncResponse {
-                id: media.id,
-                created_at: media.created_at,
+    // Step 3: Populate media_added_map
+    media_uploaded.into_iter().for_each(|media| {
+        media_uploaded_map.insert(
+            media.hash.clone(), // Assuming media.hash is the key
+            MediaAddedResponse {
+                id: media.id.clone(),
+                created_at: media.created_at.clone(),
             },
         );
     });
 
-    (StatusCode::OK, Json(partial_full_response)).into_response()
+    // Step 4: Populate media_deleted_map
+    media_deleted.into_iter().for_each(|media| {
+        media_deleted_map.push(media.id);
+    });
+
+
+    let response = PartialSyncResponse {
+        uploaded: media_uploaded_map,
+        deleted: media_deleted_map
+    };
+
+    (StatusCode::OK, Json(response)).into_response()
 }

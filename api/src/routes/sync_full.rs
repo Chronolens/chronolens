@@ -7,7 +7,7 @@ use axum::{
 };
 use http::StatusCode;
 
-use crate::{models::api_models::SyncResponse, ServerConfig};
+use crate::{models::api_models::FullSyncResponse, ServerConfig};
 
 pub async fn sync_full(
     State(server_config): State<ServerConfig>,
@@ -18,12 +18,12 @@ pub async fn sync_full(
         Err(..) => return (StatusCode::INTERNAL_SERVER_ERROR).into_response(),
     };
 
-    let mut sync_full_response: HashMap<String, SyncResponse> = HashMap::new();
+    let mut sync_full_response: HashMap<String, FullSyncResponse> = HashMap::new();
 
     remote_media.into_iter().for_each(|media| {
         sync_full_response.insert(
             media.hash,
-            SyncResponse {
+            FullSyncResponse {
                 id: media.id,
                 created_at: media.created_at,
             },

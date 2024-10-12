@@ -81,12 +81,37 @@ impl DbManager {
             preview_id: Set(None),
             hash: Set(checksum),
             created_at: Set(timestamp),
-            uploaded_at: Set(Utc::now().timestamp_millis()),
+            last_modified_at: Set(Utc::now().timestamp_millis()),
+            deleted: Set(false),
         };
 
         media::Entity::insert(media_to_insert)
             .exec(&self.connection)
             .await
+    }
+
+    async fn _delete_media(&self, media_id: i32, user_id: i32) -> Result<(), &'static str> {
+        // Find the photo to be deleted
+        let media = media::Entity::find()
+            .filter(media::Column::Id.eq(media_id))
+            .filter(media::Column::UserId.eq(user_id))
+            .one(&self.connection)
+            .await;
+
+        match media {
+            Ok(Some(media)) => {
+                let mut media_model = media.into_active_model();
+                media_model.deleted = Set(true);
+                media_model.last_modified_at = Set(Utc::now().timestamp_millis());
+                // Save changes to the database
+                match media_model.update(&self.connection).await {
+                    Ok(_) => Ok(()), // Return success if updated
+                    Err(..) => Err("Failed to delete media"),
+                }
+            }
+            Ok(None) => Err("Failed to delete media"),
+            Err(..) => Err("Error "),
+        }
     }
 
     pub async fn get_user(&self, username: String) -> Result<user::Model, &str> {
@@ -134,14 +159,15 @@ impl DbManager {
         }
     }
 
-    pub async fn sync_full(&self, user_id: String) -> Result<Vec<RemoteMedia>, &str> {
+    pub async fn sync_full(&self, user_id: String) -> Result<Vec<RemoteMediaAdded>, &str> {
         match media::Entity::find()
             .select_only()
             .select_column(media::Column::Id)
             .select_column(media::Column::CreatedAt)
             .select_column(media::Column::Hash)
             .filter(media::Column::UserId.eq(user_id))
-            .into_model::<RemoteMedia>()
+            .filter(media::Column::Deleted.eq(false))
+            .into_model::<RemoteMediaAdded>()
             .all(&self.connection)
             .await
         {
@@ -153,21 +179,57 @@ impl DbManager {
         }
     }
 
-    pub async fn sync_partial(&self, user_id: String,since: i64) -> Result<Vec<RemoteMedia>, &str> {
-        match media::Entity::find()
+    pub async fn sync_partial(
+        &self,
+        user_id: String,
+        since: i64,
+    ) -> Result<(Vec<RemoteMediaAdded>, Vec<RemoteMediaDeleted>), &str> {
+        // Query for added media
+        let changed_media = media::Entity::find()
             .select_only()
             .select_column(media::Column::Id)
             .select_column(media::Column::CreatedAt)
             .select_column(media::Column::Hash)
             .filter(media::Column::UserId.eq(user_id))
-            .filter(media::Column::UploadedAt.gt(since))
-            .into_model::<RemoteMedia>()
+            .filter(media::Column::LastModifiedAt.gt(since));
+
+        let added_media = changed_media
+            .clone()
+            .filter(media::Column::Deleted.eq(false))
+            .into_model::<RemoteMediaAdded>()
             .all(&self.connection)
+            .await;
+
+        // Query for deleted media
+        let deleted_media = changed_media
+            .clone()
+            .filter(media::Column::Deleted.eq(true)) // Deleted
+            .into_model::<RemoteMediaDeleted>()
+            .all(&self.connection)
+            .await;
+
+        match (added_media, deleted_media) {
+            (Ok(added), Ok(deleted)) => Ok((added, deleted)), // Return two vectors: added and deleted media
+            (Err(_), _) | (_, Err(_)) => {
+                Err("Failed to get media changes")
+            }
+        }
+    }
+
+    pub async fn user_has_media(&self, user_id: String,media_id: &String) -> Result<bool, &str> {
+        match media::Entity::find()
+            .select_only()
+            .select_column(media::Column::Id)
+            .filter(media::Column::Id.eq(media_id))
+            .filter(media::Column::UserId.eq(user_id))
+            .filter(media::Column::Deleted.eq(false))
+            .into_tuple::<String>()
+            .one(&self.connection)
             .await
         {
-            Ok(user) => Ok(user),
-            Err(err) => {
-                println!("Err: {}", err);
+            Ok(Some(_)) => Ok(true),
+            Ok(None) => Ok(false),
+            Err(_) => {
                 Err("Failed to get media")
             }
         }
@@ -175,8 +237,13 @@ impl DbManager {
 }
 
 #[derive(Deserialize, Debug, Clone, FromQueryResult)]
-pub struct RemoteMedia {
+pub struct RemoteMediaAdded {
     pub id: String,
     pub created_at: i64,
     pub hash: String,
+}
+
+#[derive(Deserialize, Debug, Clone, FromQueryResult)]
+pub struct RemoteMediaDeleted {
+    pub id: String,
 }
