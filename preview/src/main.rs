@@ -1,3 +1,4 @@
+use libheif_rs::{ColorSpace, HeifContext, LibHeif, RgbChroma};
 use log::{error, info, warn};
 use std::error::Error;
 use std::io::Cursor;
@@ -6,7 +7,9 @@ use std::str;
 use async_nats::jetstream::Message;
 use database::DbManager;
 use futures_util::StreamExt;
-use image::{imageops::FilterType::Triangle, DynamicImage, ImageReader};
+use image::{
+    imageops::FilterType::Triangle, DynamicImage, ImageBuffer, ImageReader, Rgba, RgbaImage,
+};
 use s3::{creds::Credentials, error::S3Error, Bucket, BucketConfiguration, Region};
 
 // Flow to create a preview
@@ -44,21 +47,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
             ..Default::default()
         })
         .await?;
-
-    // FIX: make this a proper test
-    let test_uuid = String::from("27aaaa1f-33be-4988-8334-59a1770fa0d7");
-    let img = ImageReader::open("test.jpg")?.decode()?;
-
-    // Convert image to bytes in jpg format
-    let mut img_bytes: Vec<u8> = Vec::new();
-    img.write_to(&mut Cursor::new(&mut img_bytes), image::ImageFormat::Jpeg)?;
-    let response = bucket.put_object(test_uuid.clone(), &img_bytes).await?;
-    if response.status_code() != 200 {
-        panic!("put test object failed");
-    }
-    jetstream.publish(stream_name, test_uuid.into()).await?;
-
-    // FIX: end of population -----------------------
 
     let consumer = stream
         .get_or_create_consumer(
@@ -111,6 +99,7 @@ async fn handle_message(msg: Message, bucket: Box<Bucket>, db: DbManager) {
         }
     };
 
+    let orig_image_bytes = orig_image_response.as_slice();
     let content_type = match orig_image_response.headers().get(CONTENT_TYPE_HEADER) {
         Some(ct) => *ct,
         None => {
@@ -119,27 +108,56 @@ async fn handle_message(msg: Message, bucket: Box<Bucket>, db: DbManager) {
         }
     };
 
+    let orig_image: DynamicImage;
     // FIX: create and add the other ios types
     let ios_types = ["image/heif", "image/heic"];
     if ios_types.contains(&content_type.as_str()) {
-        // TODO: decode ios type media with libheif
-    }
-
-    let orig_reader =
-        match ImageReader::new(Cursor::new(orig_image_response.as_slice())).with_guessed_format() {
-            Ok(rd) => rd,
+        // TODO: make a test for the heif conversion
+        let lib_heif = LibHeif::new();
+        let heif_context = match HeifContext::read_from_bytes(orig_image_bytes.clone()) {
+            Ok(ctx) => ctx,
+            Err(err) => {
+                error!("Error reading heif image content: {err}");
+                return;
+            }
+        };
+        let handle = match heif_context.primary_image_handle() {
+            Ok(handle) => handle,
+            Err(err) => {
+                error!("Error getting heif primary handle: {err}");
+                return;
+            }
+        };
+        let decoded_image = match lib_heif.decode(&handle, ColorSpace::Rgb(RgbChroma::Rgba), None) {
+            Ok(decoded_image) => decoded_image,
+            Err(err) => {
+                error!("Couldn't decode heif image: {err}");
+                return;
+            }
+        };
+        let width = decoded_image.width();
+        let height = decoded_image.height();
+        // FIX: take this unwrap outta here
+        let rgb_data = decoded_image.color_profile_raw().unwrap().data;
+        let rgb_img = RgbaImage::from_raw(width, height, rgb_data).unwrap();
+        orig_image = DynamicImage::from(rgb_img);
+    } else {
+        let orig_reader =
+            match ImageReader::new(Cursor::new(orig_image_bytes)).with_guessed_format() {
+                Ok(rd) => rd,
+                Err(err) => {
+                    error!("Couldn't convert image: {err}");
+                    return;
+                }
+            };
+        orig_image = match orig_reader.decode() {
+            Ok(oi) => oi,
             Err(err) => {
                 error!("Couldn't convert image: {err}");
                 return;
             }
         };
-    let orig_image = match orig_reader.decode() {
-        Ok(oi) => oi,
-        Err(err) => {
-            error!("Couldn't convert image: {err}");
-            return;
-        }
-    };
+    }
 
     // Create preview
     let preview = create_preview(orig_image, 640, 640);
