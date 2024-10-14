@@ -1,4 +1,4 @@
-use std::{collections::HashMap, i64};
+use std::collections::HashMap;
 
 use axum::{
     extract::State,
@@ -8,7 +8,7 @@ use axum::{
 use http::{HeaderMap, StatusCode};
 
 use crate::{
-    models::api_models::{MediaAddedResponse, PartialSyncResponse},
+    models::api_models::{MediaInfoResponse, PartialSyncResponse},
     ServerConfig,
 };
 
@@ -34,16 +34,16 @@ pub async fn sync_partial(
             Err(..) => return (StatusCode::INTERNAL_SERVER_ERROR).into_response(),
         };
 
-    let mut media_uploaded_map: HashMap<String, MediaAddedResponse> = HashMap::new();
+    let mut media_uploaded_map: HashMap<String, MediaInfoResponse> = HashMap::new();
     let mut media_deleted_map: Vec<String> = vec![];
 
     // Step 3: Populate media_added_map
     media_uploaded.into_iter().for_each(|media| {
         media_uploaded_map.insert(
-            media.hash.clone(), // Assuming media.hash is the key
-            MediaAddedResponse {
-                id: media.id.clone(),
-                created_at: media.created_at.clone(),
+            media.id.clone(), // Assuming media.hash is the key
+            MediaInfoResponse {
+                hash: media.hash.clone(),
+                created_at: media.created_at,
             },
         );
     });

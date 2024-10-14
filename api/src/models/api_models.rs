@@ -21,19 +21,13 @@ pub struct LoginResponse {
 }
 
 #[derive(Serialize)]
-pub struct FullSyncResponse {
-    pub id: String,
-    pub created_at: i64,
-}
-
-#[derive(Serialize)]
-pub struct MediaAddedResponse {
-    pub id: String,
+pub struct MediaInfoResponse {
+    pub hash: String,
     pub created_at: i64,
 }
 
 #[derive(Serialize)]
 pub struct PartialSyncResponse {
-    pub uploaded: HashMap<String,MediaAddedResponse>,
+    pub uploaded: HashMap<String,MediaInfoResponse>,
     pub deleted: Vec<String>
 }
