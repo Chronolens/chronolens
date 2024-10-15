@@ -7,9 +7,7 @@ use std::str;
 use async_nats::jetstream::Message;
 use database::DbManager;
 use futures_util::StreamExt;
-use image::{
-    imageops::FilterType::Triangle, DynamicImage, ImageBuffer, ImageReader, Rgba, RgbaImage,
-};
+use image::{imageops::FilterType::Triangle, DynamicImage, ImageReader, RgbImage};
 use s3::{creds::Credentials, error::S3Error, Bucket, BucketConfiguration, Region};
 
 // Flow to create a preview
@@ -101,20 +99,18 @@ async fn handle_message(msg: Message, bucket: Box<Bucket>, db: DbManager) {
 
     let orig_image_bytes = orig_image_response.as_slice();
     let content_type = match orig_image_response.headers().get(CONTENT_TYPE_HEADER) {
-        Some(ct) => *ct,
+        Some(ct) => ct.clone(),
         None => {
             warn!("No content type provided in {orig_image_id} object.");
             String::new()
         }
     };
 
-    let orig_image: DynamicImage;
     // FIX: create and add the other ios types
     let ios_types = ["image/heif", "image/heic"];
-    if ios_types.contains(&content_type.as_str()) {
-        // TODO: make a test for the heif conversion
+    let orig_image = if ios_types.contains(&content_type.as_str()) {
         let lib_heif = LibHeif::new();
-        let heif_context = match HeifContext::read_from_bytes(orig_image_bytes.clone()) {
+        let heif_context = match HeifContext::read_from_file("test.heif") {
             Ok(ctx) => ctx,
             Err(err) => {
                 error!("Error reading heif image content: {err}");
@@ -128,19 +124,33 @@ async fn handle_message(msg: Message, bucket: Box<Bucket>, db: DbManager) {
                 return;
             }
         };
-        let decoded_image = match lib_heif.decode(&handle, ColorSpace::Rgb(RgbChroma::Rgba), None) {
+
+        let decoded_image = match lib_heif.decode(&handle, ColorSpace::Rgb(RgbChroma::Rgb), None) {
             Ok(decoded_image) => decoded_image,
             Err(err) => {
                 error!("Couldn't decode heif image: {err}");
                 return;
             }
         };
+
         let width = decoded_image.width();
         let height = decoded_image.height();
-        // FIX: take this unwrap outta here
-        let rgb_data = decoded_image.color_profile_raw().unwrap().data;
-        let rgb_img = RgbaImage::from_raw(width, height, rgb_data).unwrap();
-        orig_image = DynamicImage::from(rgb_img);
+        let pixels = match decoded_image.planes().interleaved {
+            Some(pixels) => pixels,
+            None => {
+                error!("Couldn't get pixels from decoded image.");
+                return;
+            }
+        };
+        let img_buffer = match RgbImage::from_raw(width, height, pixels.data.to_vec()) {
+            Some(buffer) => buffer,
+            None => {
+                error!("Couldn't create image buffer from decoded image.");
+                return;
+            }
+        };
+
+        DynamicImage::ImageRgb8(img_buffer)
     } else {
         let orig_reader =
             match ImageReader::new(Cursor::new(orig_image_bytes)).with_guessed_format() {
@@ -150,17 +160,18 @@ async fn handle_message(msg: Message, bucket: Box<Bucket>, db: DbManager) {
                     return;
                 }
             };
-        orig_image = match orig_reader.decode() {
+        match orig_reader.decode() {
             Ok(oi) => oi,
             Err(err) => {
                 error!("Couldn't convert image: {err}");
                 return;
             }
-        };
-    }
+        }
+    };
 
     // Create preview
-    let preview = create_preview(orig_image, 640, 640);
+    // FIX: the height value shouldn't be hardcoded
+    let preview = create_preview(orig_image, 200);
 
     // Convert image to bytes in jpg format
     let mut preview_bytes: Vec<u8> = Vec::new();
@@ -169,9 +180,8 @@ async fn handle_message(msg: Message, bucket: Box<Bucket>, db: DbManager) {
         image::ImageFormat::Jpeg,
     );
 
-    // let preview_id = Uuid::new_v4().to_string();
+    let preview_id_prefix = "prev_";
     let mut preview_id = orig_image_id.clone();
-    let preview_id_prefix = "prv_";
     preview_id.insert_str(0, preview_id_prefix);
     let preview_response_data = match bucket.put_object(&preview_id, &preview_bytes).await {
         Ok(rp) => rp,
