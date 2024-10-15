@@ -235,8 +235,12 @@ async fn setup_bucket(bucket_name: &str, endpoint: &str) -> Result<Box<Bucket>, 
     Ok(bucket)
 }
 
-fn create_preview(orig: DynamicImage, preview_width: u32, preview_height: u32) -> DynamicImage {
-    // FIX: distortion needs to be fixed
-    let preview = orig.resize_exact(preview_width, preview_height, Triangle);
-    return preview;
+// Creates a preview of the image with the given height
+// The preview will have the same aspect ratio as the original image
+fn create_preview(orig: DynamicImage, preview_height: u32) -> DynamicImage {
+    let width = orig.width();
+    let height = orig.height();
+    let aspect_ratio = width as f32 / height as f32;
+    let preview_width = (preview_height as f32 * aspect_ratio) as u32;
+    orig.resize(preview_width, preview_height, Triangle)
 }
