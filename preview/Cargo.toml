@@ -12,3 +12,6 @@ libheif-rs = "1.0.2"
 rust-s3 = "0.35.1"
 futures-util = "0.3.30"
 log = "0.4.22"
+dotenvy = "0.15.7"
+envy = "0.4.2"
+serde = { version = "1.0.210", features = ["derive"] }

@@ -1,43 +1,60 @@
-use libheif_rs::{ColorSpace, HeifContext, LibHeif, RgbChroma};
-use log::{error, info, warn};
-use std::error::Error;
-use std::io::Cursor;
-use std::str;
-
-use async_nats::jetstream::Message;
+mod handler;
 use database::DbManager;
 use futures_util::StreamExt;
-use image::{imageops::FilterType::Triangle, DynamicImage, ImageReader, RgbImage};
+use handler::handle_request;
+use log::{error, info};
 use s3::{creds::Credentials, error::S3Error, Bucket, BucketConfiguration, Region};
+use serde::Deserialize;
+use std::error::Error;
 
-// Flow to create a preview
-// 1. Get event wiht uid of image from NATS
-// 2. Get image from event, and fetch it form the object storage
-// 3. Create image preview the image X
-// 4. Save preview to object storage
-// 5. Update entry in database
+#[derive(Deserialize, Debug)]
+pub struct EnvVars {
+    #[serde(alias = "NATS_ENDPOINT")]
+    #[serde(default = "nats_endpoint_default")]
+    pub nats_endpoint: String,
+    #[serde(alias = "OBJECT_STORAGE_ENDPOINT")]
+    #[serde(default = "object_storage_endpoint_default")]
+    pub object_storage_endpoint: String,
+    #[serde(alias = "OBJECT_STORAGE_BUCKET")]
+    pub object_storage_bucket: String,
+    #[serde(alias = "OBJECT_STORAGE_REGION")]
+    pub object_storage_region: String,
+    #[serde(alias = "OBJECT_STORAGE_ACCESS_KEY")]
+    pub object_storage_access_key: String,
+    #[serde(alias = "OBJECT_STORAGE_SECRET_KEY")]
+    pub object_storage_secret_key: String,
+}
 
-const CONTENT_TYPE_HEADER: &str = "ContentType";
+fn nats_endpoint_default() -> String {
+    "http://localhost".to_string()
+}
+fn object_storage_endpoint_default() -> String {
+    "http://localhost".to_string()
+}
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    let nats_addr = "localhost:4222";
-    let stream_name = String::from("previews");
+    dotenvy::dotenv().ok();
+    let envs = match envy::from_env::<EnvVars>() {
+        Ok(vars) => vars,
+        Err(err) => panic!("{}", err),
+    };
 
     let db = match DbManager::new().await {
         Ok(database) => database,
         Err(err) => panic!("{}", err),
     };
 
-    let bucket_name = "chronolens";
-    let bucket = setup_bucket(bucket_name, "http://localhost:9000").await?;
-    let client = match async_nats::connect(nats_addr).await {
+    let bucket = setup_bucket(&envs).await?;
+
+    let client = match async_nats::connect(envs.nats_endpoint).await {
         Ok(c) => c,
         Err(err) => {
-            panic!("Couldn't connect nats client.{err}");
+            panic!("Couldn't connect nats client: {err}");
         }
     };
 
     let jetstream = async_nats::jetstream::new(client);
+    let stream_name = String::from("previews");
     let stream = jetstream
         .get_or_create_stream(async_nats::jetstream::stream::Config {
             name: stream_name.clone(),
@@ -46,6 +63,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         })
         .await?;
 
+    // FIX: crate a const or a env var for the preview consumer
     let consumer = stream
         .get_or_create_consumer(
             "preview_consumer",
@@ -65,10 +83,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     String::from_utf8(msg.payload.to_vec())
                 );
 
-                // TODO: spawn a thread for each event
                 let thread_bucket = bucket.clone();
                 let thread_db = db.clone();
-                tokio::spawn(async move { handle_message(msg, thread_bucket, thread_db).await });
+                tokio::spawn(async move { handle_request(msg, thread_bucket, thread_db).await });
             }
             Err(err) => {
                 error!("Error receiving message: {err}");
@@ -77,155 +94,31 @@ async fn main() -> Result<(), Box<dyn Error>> {
     }
     return Ok(());
 }
-
-// TODO: change to env vars
-async fn handle_message(msg: Message, bucket: Box<Bucket>, db: DbManager) {
-    let payload_bytes: &[u8] = &msg.payload;
-    let orig_image_id = match str::from_utf8(payload_bytes) {
-        Ok(path) => path.to_owned(),
-        Err(err) => {
-            error!("Couldn't convert image path into utf8: {err:?}");
-            return;
-        }
-    };
-
-    let orig_image_response = match bucket.get_object(orig_image_id.clone()).await {
-        Ok(oir) => oir,
-        Err(err) => {
-            error!("Get object failed: {err}");
-            return;
-        }
-    };
-
-    let orig_image_bytes = orig_image_response.as_slice();
-    let content_type = match orig_image_response.headers().get(CONTENT_TYPE_HEADER) {
-        Some(ct) => ct.clone(),
-        None => {
-            warn!("No content type provided in {orig_image_id} object.");
-            String::new()
-        }
-    };
-
-    // FIX: create and add the other ios types
-    let ios_types = ["image/heif", "image/heic"];
-    let orig_image = if ios_types.contains(&content_type.as_str()) {
-        let lib_heif = LibHeif::new();
-        let heif_context = match HeifContext::read_from_file("test.heif") {
-            Ok(ctx) => ctx,
-            Err(err) => {
-                error!("Error reading heif image content: {err}");
-                return;
-            }
-        };
-        let handle = match heif_context.primary_image_handle() {
-            Ok(handle) => handle,
-            Err(err) => {
-                error!("Error getting heif primary handle: {err}");
-                return;
-            }
-        };
-
-        let decoded_image = match lib_heif.decode(&handle, ColorSpace::Rgb(RgbChroma::Rgb), None) {
-            Ok(decoded_image) => decoded_image,
-            Err(err) => {
-                error!("Couldn't decode heif image: {err}");
-                return;
-            }
-        };
-
-        let width = decoded_image.width();
-        let height = decoded_image.height();
-        let pixels = match decoded_image.planes().interleaved {
-            Some(pixels) => pixels,
-            None => {
-                error!("Couldn't get pixels from decoded image.");
-                return;
-            }
-        };
-        let img_buffer = match RgbImage::from_raw(width, height, pixels.data.to_vec()) {
-            Some(buffer) => buffer,
-            None => {
-                error!("Couldn't create image buffer from decoded image.");
-                return;
-            }
-        };
-
-        DynamicImage::ImageRgb8(img_buffer)
-    } else {
-        let orig_reader =
-            match ImageReader::new(Cursor::new(orig_image_bytes)).with_guessed_format() {
-                Ok(rd) => rd,
-                Err(err) => {
-                    error!("Couldn't convert image: {err}");
-                    return;
-                }
-            };
-        match orig_reader.decode() {
-            Ok(oi) => oi,
-            Err(err) => {
-                error!("Couldn't convert image: {err}");
-                return;
-            }
-        }
-    };
-
-    // Create preview
-    // FIX: the height value shouldn't be hardcoded
-    let preview = create_preview(orig_image, 200);
-
-    // Convert image to bytes in jpg format
-    let mut preview_bytes: Vec<u8> = Vec::new();
-    let _ = preview.write_to(
-        &mut Cursor::new(&mut preview_bytes),
-        image::ImageFormat::Jpeg,
-    );
-
-    let preview_id_prefix = "prev_";
-    let mut preview_id = orig_image_id.clone();
-    preview_id.insert_str(0, preview_id_prefix);
-    let preview_response_data = match bucket.put_object(&preview_id, &preview_bytes).await {
-        Ok(rp) => rp,
-        Err(err) => {
-            error!("Put preview object failed with: {err}");
-            return;
-        }
-    };
-    if preview_response_data.status_code() != 200 {
-        error!(
-            "Put preview object failed with status code: {}",
-            preview_response_data.status_code()
-        );
-        return;
-    }
-
-    if let Err(err) = db.update_media_preview(orig_image_id, preview_id).await {
-        error!("{err}");
-        return;
-    }
-
-    match msg.ack().await {
-        Ok(()) => (),
-        Err(err) => println!("Couldn't acknowledge message {err}"),
-    }
-}
-
-async fn setup_bucket(bucket_name: &str, endpoint: &str) -> Result<Box<Bucket>, S3Error> {
+async fn setup_bucket(envs: &EnvVars) -> Result<Box<Bucket>, S3Error> {
     // connect to s3 storage
-    let region = Region::Custom {
-        region: "eu-central-1".to_string(),
-        endpoint: endpoint.to_string(),
+    let region_obj = Region::Custom {
+        region: envs.object_storage_region.to_string(),
+        endpoint: envs.object_storage_endpoint.to_string(),
     };
-    // INFO: this credentials are fetched from the default location of the aws
-    // credentials (~/.aws/credentials)
-    let credentials = Credentials::default().expect("Credentials died");
+    let credentials = Credentials::new(
+        Some(&envs.object_storage_access_key),
+        Some(&envs.object_storage_secret_key),
+        None,
+        None,
+        None,
+    )?;
 
-    let mut bucket =
-        Bucket::new(bucket_name, region.clone(), credentials.clone())?.with_path_style();
+    let mut bucket = Bucket::new(
+        &envs.object_storage_bucket,
+        region_obj.clone(),
+        credentials.clone(),
+    )?
+    .with_path_style();
 
     if !bucket.exists().await? {
         bucket = Bucket::create_with_path_style(
-            bucket_name,
-            region,
+            &envs.object_storage_bucket,
+            region_obj,
             credentials,
             BucketConfiguration::default(),
         )
@@ -233,14 +126,4 @@ async fn setup_bucket(bucket_name: &str, endpoint: &str) -> Result<Box<Bucket>, 
         .bucket;
     }
     Ok(bucket)
-}
-
-// Creates a preview of the image with the given height
-// The preview will have the same aspect ratio as the original image
-fn create_preview(orig: DynamicImage, preview_height: u32) -> DynamicImage {
-    let width = orig.width();
-    let height = orig.height();
-    let aspect_ratio = width as f32 / height as f32;
-    let preview_width = (preview_height as f32 * aspect_ratio) as u32;
-    orig.resize(preview_width, preview_height, Triangle)
 }
