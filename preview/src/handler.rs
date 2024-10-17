@@ -8,7 +8,8 @@ use database::DbManager;
 use image::{imageops::FilterType::Triangle, DynamicImage, ImageReader, RgbImage};
 use s3::Bucket;
 
-const CONTENT_TYPE_HEADER: &str = "ContentType";
+// FIX: change this to the http crate
+const CONTENT_TYPE_HEADER: &str = "Content-Type";
 const PREVIEW_ID_PREFIX: &str = "prev_";
 const IOS_MEDIA_TYPES: [&str; 2] = ["image/heif", "image/heic"];
 
