@@ -69,31 +69,37 @@ async fn main() -> Result<(), Box<dyn Error>> {
             "preview_consumer",
             async_nats::jetstream::consumer::pull::Config {
                 durable_name: Some("preview_consumer".to_string()),
+                filter_subject: "previews".to_string(),
                 ..Default::default()
             },
         )
         .await?;
 
-    let mut messages = consumer.messages().await?;
-    while let Some(message) = messages.next().await {
-        match message {
-            Ok(msg) => {
-                info!(
-                    "Message received: {:?}",
-                    String::from_utf8(msg.payload.to_vec())
-                );
-
-                let thread_bucket = bucket.clone();
-                let thread_db = db.clone();
-                tokio::spawn(async move { handle_request(msg, thread_bucket, thread_db).await });
+    let messages = consumer.messages().await?;
+    let thread_limit = 5;
+    let _ = messages
+        .for_each_concurrent(thread_limit, |msg| {
+            let thread_bucket = bucket.clone();
+            let thread_db = db.clone();
+            async move {
+                match msg {
+                    Ok(msg) => {
+                        info!(
+                            "Message received: {:?}",
+                            String::from_utf8(msg.payload.to_vec())
+                        );
+                        handle_request(msg, thread_bucket, thread_db).await
+                    }
+                    Err(err) => {
+                        error!("Error receiving message: {err}");
+                    }
+                }
             }
-            Err(err) => {
-                error!("Error receiving message: {err}");
-            }
-        }
-    }
-    return Ok(());
+        })
+        .await;
+    Ok(())
 }
+
 async fn setup_bucket(envs: &EnvVars) -> Result<Box<Bucket>, S3Error> {
     // connect to s3 storage
     let region_obj = Region::Custom {
