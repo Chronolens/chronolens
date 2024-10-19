@@ -408,12 +408,10 @@ fn get_content_digest(headers: &HeaderMap) -> Result<String, Response> {
         .and_then(|checksum| checksum.strip_suffix(":"))
     {
         Some(checksum) => Ok(checksum.to_string()),
-        None => {
-            Err((
-                StatusCode::BAD_REQUEST,
-                "Invalid checksum format, please use 'sha-1=:base64_hash_here:'",
-            )
-                .into_response())
-        }
+        None => Err((
+            StatusCode::BAD_REQUEST,
+            "Invalid checksum format, please use 'sha-1=:base64_hash_here:'",
+        )
+            .into_response()),
     }
 }
