@@ -25,6 +25,7 @@ pub struct ServerConfig {
     pub database: DbManager,
     pub secret: String,
     pub bucket: Box<Bucket>,
+    pub nats_jetstream: async_nats::jetstream::Context,
 }
 
 #[derive(Deserialize, Debug)]
@@ -34,6 +35,9 @@ pub struct EnvVars {
     pub listen_on: String,
     #[serde(alias = "JWT_SECRET")]
     pub jwt_secret: String,
+    #[serde(alias = "NATS_ENDPOINT")]
+    #[serde(default = "nats_endpoint_default")]
+    pub nats_endpoint: String,
     #[serde(alias = "OBJECT_STORAGE_ENDPOINT")]
     #[serde(default = "object_storage_endpoint_default")]
     pub object_storage_endpoint: String,
@@ -47,6 +51,10 @@ pub struct EnvVars {
 
 fn listen_on_default() -> String {
     "0.0.0.0:8080".to_string()
+}
+
+fn nats_endpoint_default() -> String {
+    "http://localhost".to_string()
 }
 
 fn object_storage_endpoint_default() -> String {
@@ -73,10 +81,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Err(err) => panic!("{}", err),
     };
 
+    let client = match async_nats::connect(environment_variables.nats_endpoint).await {
+        Ok(c) => c,
+        Err(err) => {
+            panic!("Couldn't connect nats client: {err}");
+        }
+    };
+    let nats_jetstream = async_nats::jetstream::new(client);
+
     let server_config = ServerConfig {
         database,
         secret,
         bucket,
+        nats_jetstream,
     };
     // build our application with a route
     let public_routes = Router::new().route("/login", post(login));
@@ -112,9 +129,6 @@ async fn setup_bucket(envs: &EnvVars) -> Result<Box<Bucket>, S3Error> {
         region: "eu-central-1".to_string(),
         endpoint: envs.object_storage_endpoint.to_string(),
     };
-    // INFO: these credentials are fetched from the default location of the aws
-    // credentials (~/.aws/credentials)
-    //let credentials = Credentials::default().expect("Credentials died");
     let credentials = Credentials::new(
         Some(&envs.object_storage_access_key),
         Some(&envs.object_storage_secret_key),

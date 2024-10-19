@@ -221,6 +221,7 @@
 //    }
 //}
 use crate::ServerConfig;
+use axum::body::Bytes;
 use axum::extract::Request;
 use axum::response::Response;
 use axum::{extract::State, http::StatusCode, response::IntoResponse, Extension};
@@ -260,7 +261,8 @@ pub async fn upload_image(
             return (
                 StatusCode::BAD_REQUEST,
                 "Timestamp header missing or invalid format",
-            ).into_response()
+            )
+                .into_response()
         }
     };
 
@@ -361,7 +363,7 @@ pub async fn upload_image(
         Ok(..) => {
             let Ok(_) = server_config
                 .database
-                .add_media(user_id, file_uuid.to_string(), digest,timestamp)
+                .add_media(user_id, file_uuid.to_string(), digest, timestamp)
                 .await
             else {
                 //If adding to the DB fails, remove the file from the object storage
@@ -373,6 +375,17 @@ pub async fn upload_image(
                 return StatusCode::INTERNAL_SERVER_ERROR.into_response();
             };
         }
+    };
+
+    // Step 4: publish preview generation request
+    let file_uuid_bytes = Bytes::from(String::from(file_uuid));
+    let _ = match server_config
+        .nats_jetstream
+        .publish("previews", file_uuid_bytes)
+        .await
+    {
+        Ok(publish_ack) => publish_ack,
+        Err(..) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     };
 
     StatusCode::OK.into_response()
@@ -395,12 +408,10 @@ fn get_content_digest(headers: &HeaderMap) -> Result<String, Response> {
         .and_then(|checksum| checksum.strip_suffix(":"))
     {
         Some(checksum) => Ok(checksum.to_string()),
-        None => {
-            Err((
-                StatusCode::BAD_REQUEST,
-                "Invalid checksum format, please use 'sha-1=:base64_hash_here:'",
-            )
-                .into_response())
-        }
+        None => Err((
+            StatusCode::BAD_REQUEST,
+            "Invalid checksum format, please use 'sha-1=:base64_hash_here:'",
+        )
+            .into_response()),
     }
 }
