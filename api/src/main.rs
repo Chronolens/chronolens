@@ -7,14 +7,16 @@ use axum::{
     http::Request,
     middleware::{self, Next},
     response::{IntoResponse, Response},
-    routing::{post, Router},
+    routing::{get, post, Router},
 };
 use chrono::Utc;
 use database::DbManager;
 use http::StatusCode;
 use jsonwebtoken::{decode, DecodingKey, Validation};
 use models::api_models::TokenClaims;
-use routes::{login::login, upload_image::upload_image};
+use routes::{
+    login::login, preview::preview, sync_full::sync_full, sync_partial::sync_partial, upload_image::upload_image
+};
 use s3::{creds::Credentials, error::S3Error, Bucket, BucketConfiguration, Region};
 use serde::Deserialize;
 
@@ -84,6 +86,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             "/image/upload",
             post(upload_image).route_layer(DefaultBodyLimit::max(10737418240)),
         )
+        .route("/sync/full", get(sync_full))
+        .route("/sync/partial", get(sync_partial))
+        .route("/preview/:media_id", get(preview))
         .layer(middleware::from_fn_with_state(
             server_config.secret.clone(),
             auth_middleware,

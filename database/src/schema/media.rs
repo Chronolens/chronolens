@@ -9,10 +9,10 @@ pub struct Model {
     pub id: String,
     pub user_id: String,
     pub preview_id: Option<String>,
-    #[sea_orm(column_type = "VarBinary(StringLen::None)")]
-    pub hash: Vec<u8>,
+    pub hash: String,
     pub created_at: i64,
-    pub uploaded_at: i64,
+    pub last_modified_at: i64,
+    pub deleted: bool,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

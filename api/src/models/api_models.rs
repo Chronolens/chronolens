@@ -1,3 +1,4 @@
+use database::{RemoteMediaAdded, RemoteMediaDeleted};
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize,Deserialize)]
@@ -19,6 +20,7 @@ pub struct LoginResponse {
 }
 
 #[derive(Serialize)]
-pub struct UploadImageResponse {
-    pub size: u64,
+pub struct PartialSyncResponse {
+    pub uploaded: Vec<RemoteMediaAdded>,
+    pub deleted: Vec<RemoteMediaDeleted>
 }
