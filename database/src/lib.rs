@@ -9,7 +9,7 @@ use sea_orm::{
     entity::*, query::*, sqlx::types::chrono::Utc, ColumnTrait, ConnectOptions, Database,
     DatabaseConnection, DbErr, EntityTrait, FromQueryResult, QueryFilter,
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 #[derive(Deserialize, Debug)]
 struct DbEnvs {
@@ -210,13 +210,11 @@ impl DbManager {
 
         match (added_media, deleted_media) {
             (Ok(added), Ok(deleted)) => Ok((added, deleted)), // Return two vectors: added and deleted media
-            (Err(_), _) | (_, Err(_)) => {
-                Err("Failed to get media changes")
-            }
+            (Err(_), _) | (_, Err(_)) => Err("Failed to get media changes"),
         }
     }
 
-    pub async fn user_has_media(&self, user_id: String,media_id: &String) -> Result<bool, &str> {
+    pub async fn user_has_media(&self, user_id: String, media_id: &String) -> Result<bool, &str> {
         match media::Entity::find()
             .select_only()
             .select_column(media::Column::Id)
@@ -229,21 +227,20 @@ impl DbManager {
         {
             Ok(Some(_)) => Ok(true),
             Ok(None) => Ok(false),
-            Err(_) => {
-                Err("Failed to get media")
-            }
+            Err(_) => Err("Failed to get media"),
         }
     }
 }
 
-#[derive(Deserialize, Debug, Clone, FromQueryResult)]
+#[derive(Deserialize, Serialize, Debug, Clone, FromQueryResult)]
 pub struct RemoteMediaAdded {
     pub id: String,
     pub created_at: i64,
     pub hash: String,
 }
 
-#[derive(Deserialize, Debug, Clone, FromQueryResult)]
+#[derive(Deserialize, Serialize, Debug, Clone, FromQueryResult)]
+#[serde(transparent)]
 pub struct RemoteMediaDeleted {
     pub id: String,
 }

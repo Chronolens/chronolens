@@ -1,14 +1,13 @@
-use std::collections::HashMap;
-
 use axum::{
     extract::State,
     response::{IntoResponse, Response},
     Extension, Json,
 };
+use chrono::Utc;
 use http::{HeaderMap, StatusCode};
 
 use crate::{
-    models::api_models::{MediaInfoResponse, PartialSyncResponse},
+    models::api_models::PartialSyncResponse,
     ServerConfig,
 };
 
@@ -34,30 +33,14 @@ pub async fn sync_partial(
             Err(..) => return (StatusCode::INTERNAL_SERVER_ERROR).into_response(),
         };
 
-    let mut media_uploaded_map: HashMap<String, MediaInfoResponse> = HashMap::new();
-    let mut media_deleted_map: Vec<String> = vec![];
-
-    // Step 3: Populate media_added_map
-    media_uploaded.into_iter().for_each(|media| {
-        media_uploaded_map.insert(
-            media.id.clone(), // Assuming media.hash is the key
-            MediaInfoResponse {
-                hash: media.hash.clone(),
-                created_at: media.created_at,
-            },
-        );
-    });
-
-    // Step 4: Populate media_deleted_map
-    media_deleted.into_iter().for_each(|media| {
-        media_deleted_map.push(media.id);
-    });
-
+    let mut headers = HeaderMap::new();
+    headers.insert("Since", Utc::now().timestamp_millis().into()); // Add your headers here
 
     let response = PartialSyncResponse {
-        uploaded: media_uploaded_map,
-        deleted: media_deleted_map
+        uploaded: media_uploaded,
+        deleted: media_deleted
     };
 
-    (StatusCode::OK, Json(response)).into_response()
+    // Build the response with the headers and the JSON body
+    (StatusCode::OK, headers, Json(response)).into_response()
 }

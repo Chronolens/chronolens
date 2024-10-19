@@ -20,11 +20,6 @@ Cargo.lock
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
 
-
-#Vim sesions
-.session.vim
-
-
 # Added by cargo
 
 /target

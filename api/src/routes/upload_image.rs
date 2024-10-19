@@ -391,14 +391,14 @@ fn get_content_digest(headers: &HeaderMap) -> Result<String, Response> {
     };
 
     match checksum_header
-        .strip_prefix("sha-256=:")
+        .strip_prefix("sha-1=:")
         .and_then(|checksum| checksum.strip_suffix(":"))
     {
         Some(checksum) => Ok(checksum.to_string()),
         None => {
             Err((
                 StatusCode::BAD_REQUEST,
-                "Invalid checksum format, please use 'sha-256=:base64_hash_here:'",
+                "Invalid checksum format, please use 'sha-1=:base64_hash_here:'",
             )
                 .into_response())
         }

@@ -1,13 +1,12 @@
-use std::collections::HashMap;
-
 use axum::{
     extract::State,
     response::{IntoResponse, Response},
     Extension, Json,
 };
-use http::StatusCode;
+use chrono::Utc;
+use http::{HeaderMap, StatusCode};
 
-use crate::{models::api_models::MediaInfoResponse, ServerConfig};
+use crate::ServerConfig;
 
 pub async fn sync_full(
     State(server_config): State<ServerConfig>,
@@ -18,17 +17,12 @@ pub async fn sync_full(
         Err(..) => return (StatusCode::INTERNAL_SERVER_ERROR).into_response(),
     };
 
-    let mut sync_full_response: HashMap<String, MediaInfoResponse> = HashMap::new();
+    let mut headers = HeaderMap::new();
+    // TODO: Get the max here and on the partial aswell
 
-    remote_media.into_iter().for_each(|media| {
-        sync_full_response.insert(
-            media.id,
-            MediaInfoResponse {
-                hash: media.hash,
-                created_at: media.created_at,
-            },
-        );
-    });
+    //let timestamp = remote_media.iter().max_by(|&a,&b| a.created_at.cmp(&b.created_at));
+    headers.insert("Since", Utc::now().timestamp_millis().into()); // Add your headers here
 
-    (StatusCode::OK, Json(sync_full_response)).into_response()
+    // Build the response with the headers and the JSON body
+    (StatusCode::OK, headers, Json(remote_media)).into_response()
 }
