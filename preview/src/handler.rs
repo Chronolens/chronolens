@@ -5,12 +5,15 @@ use std::str;
 
 use async_nats::jetstream::Message;
 use database::DbManager;
-use image::{imageops::FilterType::Triangle, DynamicImage, ImageReader, RgbImage};
+use image::{
+    imageops::FilterType::Triangle, DynamicImage, GenericImageView, ImageDecoder, ImageReader,
+    RgbImage,
+};
 use s3::Bucket;
 
 // FIX: change this to the http crate
 const CONTENT_TYPE_HEADER: &str = "Content-Type";
-const PREVIEW_ID_PREFIX: &str = "prev_";
+const PREVIEW_ID_PREFIX: &str = "prev/";
 const IOS_MEDIA_TYPES: [&str; 2] = ["image/heif", "image/heic"];
 
 pub async fn handle_request(msg: Message, bucket: Box<Bucket>, db: DbManager) {
@@ -93,13 +96,29 @@ pub async fn handle_request(msg: Message, bucket: Box<Bucket>, db: DbManager) {
                     return;
                 }
             };
-        match source_reader.decode() {
+        let mut decoder = match source_reader.into_decoder() {
+            Ok(decoder) => decoder,
+            Err(err) => {
+                error!("Could not decode image: {err}");
+                return;
+            }
+        };
+        let orientation = match decoder.orientation(){
+            Ok(orientation) => orientation,
+            Err(err) => {
+                error!("Could not get image orientation: {err}");
+                return;
+            }
+        };
+        let mut dynamic_image = match DynamicImage::from_decoder(decoder) {
             Ok(oi) => oi,
             Err(err) => {
                 error!("Couldn't convert image: {err}");
                 return;
             }
-        }
+        };
+        dynamic_image.apply_orientation(orientation);
+        dynamic_image
     };
 
     // Create preview
@@ -115,7 +134,10 @@ pub async fn handle_request(msg: Message, bucket: Box<Bucket>, db: DbManager) {
 
     let mut preview_id = source_image_id.clone();
     preview_id.insert_str(0, PREVIEW_ID_PREFIX);
-    let preview_response_data = match bucket.put_object(&preview_id, &preview_bytes).await {
+    let preview_response_data = match bucket
+        .put_object_with_content_type(&preview_id, &preview_bytes, "image/jpeg")
+        .await
+    {
         Ok(rp) => rp,
         Err(err) => {
             error!("Put preview object failed with: {err}");
@@ -141,11 +163,24 @@ pub async fn handle_request(msg: Message, bucket: Box<Bucket>, db: DbManager) {
     }
 }
 
+// Function to handle EXIF orientation
+//fn fix_orientation(image: DynamicImage) -> DynamicImage {
+//    if let Some(exif_orientation) = get_exif_orientation(&image) {
+//        match exif_orientation {
+//            3 => image.rotate180(),
+//            6 => image.rotate90(),
+//            8 => image.rotate270(),
+//            _ => image, // No rotation needed
+//        }
+//    } else {
+//        image // No EXIF data found
+//    }
+//}
+
 // Creates a preview of the image with the given height
 // The preview will have the same aspect ratio as the original image
 fn create_preview(orig: DynamicImage, preview_height: u32) -> DynamicImage {
-    let width = orig.width();
-    let height = orig.height();
+    let (width, height) = orig.dimensions();
     let aspect_ratio = width as f32 / height as f32;
     let preview_width = (preview_height as f32 * aspect_ratio) as u32;
     orig.resize(preview_width, preview_height, Triangle)
