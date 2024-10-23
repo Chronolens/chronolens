@@ -1,1 +1,1 @@
-pub mod nats;
+pub mod jwt;
