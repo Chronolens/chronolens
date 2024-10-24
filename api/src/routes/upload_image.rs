@@ -378,7 +378,7 @@ pub async fn upload_image(
     };
 
     // Step 4: publish preview generation request
-    let file_uuid_bytes = Bytes::from(file_uuid.to_string());
+    let file_uuid_bytes = Bytes::from(String::from(file_uuid));
     let _ = match server_config
         .nats_jetstream
         .publish("previews", file_uuid_bytes.clone())
