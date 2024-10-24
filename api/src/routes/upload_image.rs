@@ -378,15 +378,26 @@ pub async fn upload_image(
     };
 
     // Step 4: publish preview generation request
-    let file_uuid_bytes = Bytes::from(String::from(file_uuid));
+    let file_uuid_bytes = Bytes::from(file_uuid.to_string());
     let _ = match server_config
         .nats_jetstream
-        .publish("previews", file_uuid_bytes)
+        .publish("previews", file_uuid_bytes.clone())
         .await
     {
         Ok(publish_ack) => publish_ack,
         Err(..) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     };
+
+    // Step 5: publish ml embeddings generation request
+    let _ = match server_config
+        .nats_jetstream
+        .publish("machine-learning", file_uuid_bytes)
+        .await
+    {
+        Ok(publish_ack) => publish_ack,
+        Err(..) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    };
+
 
     StatusCode::OK.into_response()
 }
