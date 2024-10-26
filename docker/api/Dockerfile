@@ -1,4 +1,4 @@
 ARG TAG
-FROM ghcr.io/chronolens/chronolens-base:${TAG}
+FROM chronolens-base:$TAG
 
 CMD ["./target/release/api"]
