@@ -9,6 +9,11 @@ on:
 jobs:
   build-and-publish:
     runs-on: ubuntu-latest
+    services:
+      registry:
+        image: registry:2
+        ports:
+          - 5000:5000
 
     permissions:
       contents: read
@@ -23,14 +28,16 @@ jobs:
       
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: network=host
 
       - name: Build Base Image Locally
         uses: docker/build-push-action@v6
         with:
           context: ./docker/base
-          push: false  # Set push to false to build locally
+          push: true
           tags: |
-            chronolens-base:${{ github.ref_name }}
+            localhost:5000/chronolens/chronolens-base:${{ github.ref_name }}
           build-args: |
             TAG=${{ github.ref_name }}
           platforms: linux/amd64,linux/arm64
