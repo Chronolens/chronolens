@@ -31,15 +31,6 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Set Image Tag Based on Branch
-        id: image-tag
-        run: |
-          if [[ "${{ github.ref_name }}" == "dev" ]]; then
-            echo "tag=dev" >> $GITHUB_ENV
-          elif [[ "${{ github.ref_name }}" == "main" ]]; then
-            echo "tag=latest" >> $GITHUB_ENV
-          fi
-
       - name: Build and Push Base Image
         uses: docker/build-push-action@v6
         with:
@@ -57,7 +48,7 @@ jobs:
           context: ./docker/api
           push: true
           tags: |
-            ghcr.io/chronolens/chronolens-api:${{ env.tag }}
+            ghcr.io/chronolens/chronolens-api:${{ github.ref_name }}
           build-args: |
             TAG=${{ github.ref_name }}
           platforms: linux/amd64,linux/arm64
@@ -68,7 +59,7 @@ jobs:
           context: ./docker/preview
           push: true
           tags: |
-            ghcr.io/chronolens/chronolens-preview:${{ env.tag }}
+            ghcr.io/chronolens/chronolens-preview:${{ github.ref_name }}
           build-args: |
             TAG=${{ github.ref_name }}
           platforms: linux/amd64,linux/arm64
