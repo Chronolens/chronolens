@@ -37,7 +37,7 @@ jobs:
           context: ./docker/base
           push: true
           tags: |
-            ghcr.io/${{ github.repository_owner }}/chronolens-base:${{ github.ref_name }}
+            ghcr.io/chronolens/chronolens-base:${{ github.ref_name }}
           build-args: |
             TAG=${{ github.ref_name }}  # Pass branch name as a build argument
           platforms: linux/amd64,linux/arm64
@@ -48,7 +48,7 @@ jobs:
           context: ./docker/api
           push: true
           tags: |
-            ghcr.io/${{ github.repository_owner }}/chronolens-api:${{ env.tag }}
+            ghcr.io/chronolens/chronolens-api:${{ env.tag }}
           build-args: |
             TAG=${{ github.ref_name }}  # Pass branch name as a build argument
           platforms: linux/amd64,linux/arm64
@@ -59,8 +59,7 @@ jobs:
           context: ./docker/preview
           push: true
           tags: |
-            ghcr.io/${{ github.repository_owner }}/chronolens-preview:${{ env.tag }}
+            ghcr.io/chronolens/chronolens-preview:${{ env.tag }}
           build-args: |
             TAG=${{ github.ref_name }}  # Pass branch name as a build argument
           platforms: linux/amd64,linux/arm64
-
