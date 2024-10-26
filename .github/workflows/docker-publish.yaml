@@ -63,4 +63,3 @@ jobs:
           build-args: |
             TAG=${{ github.ref_name }}  # Pass branch name as a build argument
           platforms: linux/amd64,linux/arm64
-
