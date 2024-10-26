@@ -1,4 +1,4 @@
 ARG TAG
-FROM chronolens-base:$TAG
+FROM localhost:5000/chronolens/chronolens-base:$TAG
 
 CMD ["./target/release/preview"]
