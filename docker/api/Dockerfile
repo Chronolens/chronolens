@@ -4,7 +4,8 @@ FROM ubuntu:latest
 
 WORKDIR /usr/src/myapp
 COPY . .
-RUN "ls -ali"
+RUN pwd
+RUN ls
 
 RUN cargo install --path .
 
