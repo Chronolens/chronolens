@@ -3,7 +3,7 @@
 FROM ubuntu:latest
 
 WORKDIR /usr/src/myapp
-COPY ../.. .
+COPY . .
 RUN pwd
 RUN ls
 
