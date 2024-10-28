@@ -12,4 +12,4 @@ ENV PATH="/root/.cargo/bin:$PATH"
 
 WORKDIR /app
 
-RUN cargo build --release
+# RUN cargo build --release
