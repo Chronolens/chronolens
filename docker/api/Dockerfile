@@ -1,4 +1,8 @@
-ARG TAG
-FROM ghcr.io/chronolens/chronolens-base:$TAG
+FROM rust:1.82
 
-CMD ["./target/release/api"]
+WORKDIR /usr/src/myapp
+COPY ./api .
+
+RUN cargo install --path .
+
+CMD ["myapp"]
