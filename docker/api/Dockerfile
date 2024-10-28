@@ -1,8 +1,10 @@
-FROM rust:1.82
+# FROM rust:1.82
+#
+FROM ubuntu:latest
 
 WORKDIR /usr/src/myapp
 COPY . .
-WORKDIR api
+RUN "ls -ali"
 
 RUN cargo install --path .
 
