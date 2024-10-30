@@ -5,6 +5,9 @@ COPY . .
 
 WORKDIR /usr/src/myapp/api
 
+RUN ls
 RUN cargo install --path .
+
+RUN ls
 
 CMD ["myapp"]
