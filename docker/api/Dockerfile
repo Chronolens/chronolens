@@ -5,9 +5,6 @@ COPY . .
 
 WORKDIR /usr/src/myapp/api
 
-RUN ls
-RUN cargo install --path .
+RUN cargo install --path . --target-dir .
 
-RUN ls
-
-CMD ["myapp"]
+CMD ["./release/api"]
