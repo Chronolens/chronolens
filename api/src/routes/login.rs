@@ -22,12 +22,12 @@ pub async fn login(
         .await
     {
         Ok(pw) => pw,
-        Err(..) => return (StatusCode::UNAUTHORIZED).into_response(),
+        Err(..) => return (StatusCode::FORBIDDEN).into_response(),
     };
 
     let matched = match bcrypt::verify(login_request.password, &user.password) {
         Ok(matched) => matched,
-        Err(..) => return (StatusCode::UNAUTHORIZED).into_response(),
+        Err(..) => return (StatusCode::FORBIDDEN).into_response(),
     };
 
     if matched {
@@ -45,6 +45,6 @@ pub async fn login(
         };
         (StatusCode::OK, Json(LoginResponse { token })).into_response()
     } else {
-        (StatusCode::UNAUTHORIZED).into_response()
+        (StatusCode::FORBIDDEN).into_response()
     }
 }
