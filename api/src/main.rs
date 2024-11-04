@@ -130,7 +130,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 async fn setup_bucket(envs: &EnvVars) -> Result<Box<Bucket>, S3Error> {
     // connect to s3 storage
     let region = Region::Custom {
-        region: "auto".to_string(),
+        region: "eu-central-1".to_string(),
         endpoint: envs.object_storage_endpoint.to_string(),
     };
     let credentials = Credentials::new(
@@ -143,7 +143,9 @@ async fn setup_bucket(envs: &EnvVars) -> Result<Box<Bucket>, S3Error> {
 
     let mut bucket = Bucket::new(
         &envs.object_storage_bucket,
-        region.clone(),
+        Region::R2 {
+            account_id: "6f69eb15ec0a5662919d4bee9cecd014".to_string(),
+        },
         credentials.clone(),
     )?
     .with_path_style();
