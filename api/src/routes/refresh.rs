@@ -36,7 +36,7 @@ pub async fn refresh(
 
     if now < refresh_token_data.claims.iat || now > refresh_token_data.claims.exp {
         return (
-            StatusCode::UNAUTHORIZED,
+            StatusCode::FORBIDDEN,
             "Refresh token is invalid, please reauthenticate",
         )
             .into_response();
@@ -44,7 +44,7 @@ pub async fn refresh(
 
     if refresh_token_data.claims.access_token != refresh_token_request.access_token {
         return (
-            StatusCode::UNAUTHORIZED,
+            StatusCode::FORBIDDEN,
             "The provided refresh token is not associated with the access_token",
         )
             .into_response();

@@ -20,7 +20,7 @@ pub async fn media(
         Ok(has_media) => has_media,
         Err(..) => {
             return (
-                StatusCode::UNAUTHORIZED,
+                StatusCode::FORBIDDEN,
                 "Media does not exist or user does not have permissions to access it",
             )
                 .into_response()
@@ -36,7 +36,7 @@ pub async fn media(
         (StatusCode::OK, url).into_response()
     } else {
         (
-            StatusCode::UNAUTHORIZED,
+            StatusCode::FORBIDDEN,
             "Media does not exist or user does not have permissions to access it",
         )
             .into_response()
