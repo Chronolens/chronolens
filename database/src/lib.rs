@@ -230,6 +230,31 @@ impl DbManager {
             Err(_) => Err("Failed to get media"),
         }
     }
+    pub async fn get_preview_from_user(
+        &self,
+        user_id: String,
+        media_id: &String,
+    ) -> Result<String, GetPreviewError> {
+        match media::Entity::find()
+            .select_only()
+            .select_column(media::Column::PreviewId)
+            .filter(media::Column::Id.eq(media_id))
+            .filter(media::Column::UserId.eq(user_id))
+            .filter(media::Column::Deleted.eq(false))
+            .into_tuple::<String>()
+            .one(&self.connection)
+            .await
+        {
+            Ok(Some(preview_id)) => Ok(preview_id),
+            Ok(None) => Err(GetPreviewError::NotFound),
+            Err(_) => Err(GetPreviewError::InternalError),
+        }
+    }
+}
+
+pub enum GetPreviewError {
+    NotFound,
+    InternalError
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone, FromQueryResult)]

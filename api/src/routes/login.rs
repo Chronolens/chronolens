@@ -1,14 +1,14 @@
 use axum::{
     extract::State,
-    http::StatusCode,
     response::{IntoResponse, Response},
     Json,
 };
 use chrono::Utc;
-use jsonwebtoken::{EncodingKey, Header};
+use http::StatusCode;
 
 use crate::{
-    models::api_models::{LoginRequest, LoginResponse, TokenClaims},
+    models::api_models::{LoginRequest, TokenResponse},
+    utils::jwt::generate_jwt_tokens,
     ServerConfig,
 };
 
@@ -31,19 +31,35 @@ pub async fn login(
     };
 
     if matched {
-        let claims = TokenClaims {
-            iat: Utc::now().timestamp_millis(),
-            exp: Utc::now().timestamp_millis() + 604_800_000,
-            user_id: user.id.clone()
-        };
+        let now = Utc::now().timestamp_millis();
+        let access_expires_at = now + 3_600_000;
+        let refresh_expires_at = now + 172_800_000;
 
-        let secret = &EncodingKey::from_secret(server_config.secret.as_ref());
-
-        let token = match jsonwebtoken::encode(&Header::default(), &claims, secret) {
-            Ok(token) => token,
-            Err(..) => panic!("Error generating JWT token"),
+        let (access_token, refresh_token) = match generate_jwt_tokens(
+            server_config.secret,
+            user.id,
+            now,
+            access_expires_at,
+            refresh_expires_at,
+        ) {
+            Ok(tokens) => tokens,
+            Err(..) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Error generating JWT tokens",
+                )
+                    .into_response()
+            }
         };
-        (StatusCode::OK, Json(LoginResponse { token })).into_response()
+        (
+            StatusCode::OK,
+            Json(TokenResponse {
+                access_token,
+                refresh_token,
+                expires_at: access_expires_at,
+            }),
+        )
+            .into_response()
     } else {
         (StatusCode::FORBIDDEN).into_response()
     }

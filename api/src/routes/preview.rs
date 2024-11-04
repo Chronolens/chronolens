@@ -3,6 +3,7 @@ use axum::{
     response::{IntoResponse, Response},
     Extension,
 };
+use database::GetPreviewError;
 use http::StatusCode;
 
 use crate::ServerConfig;
@@ -14,7 +15,7 @@ pub async fn preview(
 ) -> Response {
     match server_config
         .database
-        .user_has_media(user_id, &media_id)
+        .get_preview_from_user(user_id, &media_id)
         .await
     {
         Ok(preview_id) => {
@@ -27,9 +28,9 @@ pub async fn preview(
         }
         Err(GetPreviewError::InternalError) => (StatusCode::INTERNAL_SERVER_ERROR).into_response(),
         Err(GetPreviewError::NotFound) => (
-            StatusCode::FORBIDDEN,
+            StatusCode::UNAUTHORIZED,
             "Media does not exist or user does not have permissions to access it",
         )
-            .into_response()
+            .into_response(),
     }
 }

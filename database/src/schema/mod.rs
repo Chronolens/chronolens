@@ -4,3 +4,5 @@ pub mod prelude;
 
 pub mod media;
 pub mod user;
+pub mod log;
+pub mod face_data;
