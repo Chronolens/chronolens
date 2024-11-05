@@ -48,6 +48,8 @@ pub struct EnvVars {
     pub object_storage_access_key: String,
     #[serde(alias = "OBJECT_STORAGE_SECRET_KEY")]
     pub object_storage_secret_key: String,
+    #[serde(alias = "OBJECT_STORAGE_REGION")]
+    pub object_storage_region: String,
 }
 
 fn listen_on_default() -> String {
@@ -130,7 +132,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 async fn setup_bucket(envs: &EnvVars) -> Result<Box<Bucket>, S3Error> {
     // connect to s3 storage
     let region = Region::Custom {
-        region: "eu-central-1".to_string(),
+        region: envs.object_storage_region.to_string(),
         endpoint: envs.object_storage_endpoint.to_string(),
     };
     let credentials = Credentials::new(
