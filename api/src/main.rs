@@ -130,7 +130,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 async fn setup_bucket(envs: &EnvVars) -> Result<Box<Bucket>, S3Error> {
     // connect to s3 storage
     let region = Region::Custom {
-        region: envs.object_storage_region.to_string(),
+        region: "eu-central-1".to_string(),
         endpoint: envs.object_storage_endpoint.to_string(),
     };
     let credentials = Credentials::new(
