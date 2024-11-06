@@ -143,9 +143,7 @@ async fn setup_bucket(envs: &EnvVars) -> Result<Box<Bucket>, S3Error> {
 
     let mut bucket = Bucket::new(
         &envs.object_storage_bucket,
-        Region::R2 {
-            account_id: "6f69eb15ec0a5662919d4bee9cecd014".to_string(),
-        },
+        region.clone(),
         credentials.clone(),
     )?
     .with_path_style();
