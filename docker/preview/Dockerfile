@@ -1,4 +1,10 @@
-ARG TAG
-FROM localhost:6000/chronolens/base:$TAG
+FROM ghcr.io/chronolens/chronolens/libheif:latest
 
-CMD ["./target/release/preview"]
+WORKDIR /app
+
+COPY . .
+WORKDIR /app/preview
+
+RUN cargo install --path . --target-dir .
+
+CMD ["./release/preview"]

@@ -7,9 +7,4 @@ RUN apt-get update && \
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
 ENV PATH="/root/.cargo/bin:$PATH"
 
-ARG TAG
-RUN git clone --single-branch --branch $TAG https://github.com/chronolens/chronolens /app
-
 WORKDIR /app
-
-RUN cargo build --release

@@ -1,4 +1,10 @@
-ARG TAG
-FROM localhost:6000/chronolens/base:$TAG
+FROM rust:1.82
 
-CMD ["./target/release/api"]
+WORKDIR /usr/src/myapp
+COPY . .
+
+WORKDIR /usr/src/myapp/api
+
+RUN cargo install --path . --target-dir .
+
+CMD ["./release/api"]
