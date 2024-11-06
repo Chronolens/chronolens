@@ -1,4 +1,10 @@
-ARG TAG
-FROM ghcr.io/chronolens/chronolens-base:$TAG
+FROM rust:1.82
 
-CMD ["./target/release/preview"]
+WORKDIR /usr/src/myapp
+COPY . .
+
+WORKDIR /usr/src/myapp/preview
+
+RUN cargo install --path . --target-dir .
+
+CMD ["./release/preview"]
