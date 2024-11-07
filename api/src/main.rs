@@ -15,8 +15,8 @@ use http::StatusCode;
 use jsonwebtoken::{decode, DecodingKey, Validation};
 use models::api_models::AccessTokenClaims;
 use routes::{
-    login::login, media::media, preview::preview, refresh::refresh, sync_full::sync_full,
-    sync_partial::sync_partial, upload_image::upload_image,
+    login::login, logs::logs, media::media, preview::preview, previews::previews, refresh::refresh,
+    sync_full::sync_full, sync_partial::sync_partial, upload_image::upload_image,
 };
 use s3::{creds::Credentials, error::S3Error, Bucket, BucketConfiguration, Region};
 use serde::Deserialize;
@@ -110,8 +110,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         )
         .route("/sync/full", get(sync_full))
         .route("/sync/partial", get(sync_partial))
+        .route("/previews", get(previews))
         .route("/preview/:media_id", get(preview))
         .route("/media/:media_id", get(media))
+        .route("/logs", get(logs))
         .layer(middleware::from_fn_with_state(
             server_config.secret.clone(),
             auth_middleware,
