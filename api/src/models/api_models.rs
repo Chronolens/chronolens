@@ -1,14 +1,14 @@
 use database::{RemoteMediaAdded, RemoteMediaDeleted};
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize,Deserialize)]
+#[derive(Serialize, Deserialize)]
 pub struct AccessTokenClaims {
     pub iat: i64,
     pub exp: i64,
     pub user_id: String,
 }
 
-#[derive(Serialize,Deserialize)]
+#[derive(Serialize, Deserialize)]
 pub struct RefreshTokenClaims {
     pub iat: i64,
     pub exp: i64,
@@ -37,7 +37,7 @@ pub struct TokenResponse {
 #[derive(Serialize)]
 pub struct PartialSyncResponse {
     pub uploaded: Vec<RemoteMediaAdded>,
-    pub deleted: Vec<RemoteMediaDeleted>
+    pub deleted: Vec<RemoteMediaDeleted>,
 }
 
 #[derive(Serialize)]

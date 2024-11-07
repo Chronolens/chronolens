@@ -103,7 +103,7 @@ pub async fn handle_request(msg: Message, bucket: Box<Bucket>, db: DbManager) {
                 return;
             }
         };
-        let orientation = match decoder.orientation(){
+        let orientation = match decoder.orientation() {
             Ok(orientation) => orientation,
             Err(err) => {
                 error!("Could not get image orientation: {err}");

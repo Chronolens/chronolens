@@ -398,7 +398,6 @@ pub async fn upload_image(
         Err(..) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     };
 
-
     StatusCode::OK.into_response()
 }
 

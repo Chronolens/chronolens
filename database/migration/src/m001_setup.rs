@@ -8,7 +8,8 @@ impl MigrationTrait for Migration {
     async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
         let db = manager.get_connection();
 
-        db.execute_unprepared("CREATE EXTENSION IF NOT EXISTS vectors").await?;
+        db.execute_unprepared("CREATE EXTENSION IF NOT EXISTS vectors")
+            .await?;
         Ok(())
     }
 }

@@ -24,7 +24,9 @@ pub async fn login(
     {
         Ok(user) => user,
         Err(GetUserError::NotFound) => return (StatusCode::FORBIDDEN).into_response(),
-        Err(GetUserError::InternalError) => return (StatusCode::INTERNAL_SERVER_ERROR).into_response(),
+        Err(GetUserError::InternalError) => {
+            return (StatusCode::INTERNAL_SERVER_ERROR).into_response()
+        }
     };
 
     let matched = match bcrypt::verify(login_request.password, &user.password) {
