@@ -123,12 +123,8 @@ impl DbManager {
             .await
         {
             Ok(Some(user)) => Ok(user),
-            Ok(None) => {
-                Err(GetUserError::NotFound)
-            }
-            Err(..) => {
-                Err(GetUserError::InternalError)
-            }
+            Ok(None) => Err(GetUserError::NotFound),
+            Err(..) => Err(GetUserError::InternalError),
         }
     }
     pub async fn update_media_preview(

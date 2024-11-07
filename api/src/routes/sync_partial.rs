@@ -6,10 +6,7 @@ use axum::{
 use chrono::Utc;
 use http::{HeaderMap, StatusCode};
 
-use crate::{
-    models::api_models::PartialSyncResponse,
-    ServerConfig,
-};
+use crate::{models::api_models::PartialSyncResponse, ServerConfig};
 
 pub async fn sync_partial(
     State(server_config): State<ServerConfig>,
@@ -38,7 +35,7 @@ pub async fn sync_partial(
 
     let response = PartialSyncResponse {
         uploaded: media_uploaded,
-        deleted: media_deleted
+        deleted: media_deleted,
     };
 
     // Build the response with the headers and the JSON body

@@ -46,5 +46,5 @@ pub enum Media {
     Hash,
     CreatedAt,
     LastModifiedAt,
-    Deleted
+    Deleted,
 }

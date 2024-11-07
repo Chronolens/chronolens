@@ -23,7 +23,11 @@ pub async fn logs(
     let page = pagination.page.unwrap_or(1).max(1);
     let page_size = pagination.page_size.unwrap_or(10).clamp(1, 30);
 
-    match server_config.database.get_logs(user_id, page, page_size).await {
+    match server_config
+        .database
+        .get_logs(user_id, page, page_size)
+        .await
+    {
         Ok(log_entries) => {
             (StatusCode::OK, Json(LogResponse { logs: log_entries })).into_response()
         }
