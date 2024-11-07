@@ -3,8 +3,7 @@ FROM ghcr.io/chronolens/chronolens/libheif:latest
 WORKDIR /app
 
 COPY . .
-WORKDIR /app/preview
 
-RUN cargo install --path . --target-dir .
+RUN cargo build --release --bin preview
 
-CMD ["./release/preview"]
+CMD ["./target/release/preview"]
