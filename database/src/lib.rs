@@ -2,6 +2,7 @@ pub mod schema;
 
 use migration::{Migrator, MigratorTrait};
 use schema::{
+    log,
     media::{self, ActiveModel},
     user,
 };
@@ -10,6 +11,7 @@ use sea_orm::{
     DatabaseConnection, DbErr, EntityTrait, FromQueryResult, QueryFilter,
 };
 use serde::{Deserialize, Serialize};
+use std::string::ToString;
 
 #[derive(Deserialize, Debug)]
 struct DbEnvs {
@@ -114,16 +116,18 @@ impl DbManager {
         }
     }
 
-    pub async fn get_user(&self, username: String) -> Result<user::Model, &str> {
+    pub async fn get_user(&self, username: String) -> Result<user::Model, GetUserError> {
         match user::Entity::find()
             .filter(user::Column::Username.eq(username))
             .one(&self.connection)
             .await
         {
-            Ok(user) => Ok(user.expect("Username not found")),
-            Err(err) => {
-                println!("Err: {}", err);
-                Err("Failed to get user")
+            Ok(Some(user)) => Ok(user),
+            Ok(None) => {
+                Err(GetUserError::NotFound)
+            }
+            Err(..) => {
+                Err(GetUserError::InternalError)
             }
         }
     }
@@ -230,6 +234,32 @@ impl DbManager {
             Err(_) => Err("Failed to get media"),
         }
     }
+
+    pub async fn get_previews(
+        &self,
+        user_id: String,
+        page: u64,
+        page_size: u64,
+    ) -> Result<Vec<String>, GetPreviewError> {
+        let offset = (page - 1) * page_size;
+
+        match media::Entity::find()
+            .order_by_desc(media::Column::CreatedAt)
+            .select_only()
+            .select_column(media::Column::PreviewId)
+            .filter(media::Column::UserId.eq(user_id))
+            .filter(media::Column::Deleted.eq(false))
+            .offset(offset)
+            .limit(page_size)
+            .into_tuple::<String>()
+            .all(&self.connection)
+            .await
+        {
+            Ok(preview_ids) => Ok(preview_ids),
+            Err(_) => Err(GetPreviewError::InternalError),
+        }
+    }
+
     pub async fn get_preview_from_user(
         &self,
         user_id: String,
@@ -250,11 +280,98 @@ impl DbManager {
             Err(_) => Err(GetPreviewError::InternalError),
         }
     }
+
+    pub async fn get_logs(
+        &self,
+        user_id: String,
+        page: u64,
+        page_size: u64,
+    ) -> Result<Vec<LogEntry>, GetLogError> {
+        let offset = (page - 1) * page_size;
+
+        match log::Entity::find()
+            .order_by_desc(log::Column::Date)
+            .filter(log::Column::UserId.eq(user_id))
+            .offset(offset)
+            .limit(page_size)
+            .all(&self.connection)
+            .await
+        {
+            Ok(log_models) => {
+                let log_entries = log_models
+                    .into_iter()
+                    .map(|model| LogEntry {
+                        id: model.id,
+                        level: model.level,
+                        date: model.date,
+                        message: model.message,
+                    })
+                    .collect();
+                Ok(log_entries)
+            }
+            Err(_) => Err(GetLogError::InternalError),
+        }
+    }
+
+    pub async fn add_log(
+        &self,
+        user_id: String,
+        level: LogLevel,
+        date: i64,
+        message: String,
+    ) -> Result<(), AddLogError> {
+        let new_log = log::ActiveModel {
+            user_id: Set(user_id),
+            level: Set(level.to_string()),
+            date: Set(date),
+            message: Set(message),
+            ..Default::default()
+        };
+
+        match new_log.insert(&self.connection).await {
+            Ok(_) => Ok(()),
+            Err(_) => Err(AddLogError::InternalError),
+        }
+    }
 }
 
 pub enum GetPreviewError {
     NotFound,
-    InternalError
+    InternalError,
+}
+
+pub enum GetLogError {
+    InternalError,
+    NotFound,
+}
+
+pub enum AddLogError {
+    InternalError,
+}
+
+pub enum GetUserError {
+    NotFound,
+    InternalError,
+}
+
+#[derive(strum_macros::Display, Debug)]
+pub enum LogLevel {
+    Info,
+    Error,
+}
+
+#[derive(Serialize)]
+pub struct LogEntry {
+    pub id: i32,
+    pub level: String,
+    pub date: i64,
+    pub message: String,
+}
+
+#[derive(Serialize)]
+#[serde(transparent)]
+pub struct LogResponse {
+    pub logs: Vec<LogEntry>,
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone, FromQueryResult)]

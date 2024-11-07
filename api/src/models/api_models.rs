@@ -39,3 +39,9 @@ pub struct PartialSyncResponse {
     pub uploaded: Vec<RemoteMediaAdded>,
     pub deleted: Vec<RemoteMediaDeleted>
 }
+
+#[derive(Serialize)]
+#[serde(transparent)]
+pub struct PreviewResponse {
+    pub previews: Vec<String>,
+}

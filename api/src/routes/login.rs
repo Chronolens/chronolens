@@ -4,6 +4,7 @@ use axum::{
     Json,
 };
 use chrono::Utc;
+use database::GetUserError;
 use http::StatusCode;
 
 use crate::{
@@ -21,8 +22,9 @@ pub async fn login(
         .get_user(login_request.username.clone())
         .await
     {
-        Ok(pw) => pw,
-        Err(..) => return (StatusCode::FORBIDDEN).into_response(),
+        Ok(user) => user,
+        Err(GetUserError::NotFound) => return (StatusCode::FORBIDDEN).into_response(),
+        Err(GetUserError::InternalError) => return (StatusCode::INTERNAL_SERVER_ERROR).into_response(),
     };
 
     let matched = match bcrypt::verify(login_request.password, &user.password) {
