@@ -17,7 +17,7 @@ pub async fn upload_image(
     headers: HeaderMap,
     mut multipart: Multipart,
 ) -> Response {
-    while let Ok(Some(mut field)) = multipart
+    if let Ok(Some(mut field)) = multipart
         .next_field()
         .await
         .map_err(|_| StatusCode::BAD_REQUEST.into_response())
@@ -60,9 +60,8 @@ pub async fn upload_image(
         };
 
         if image_exists {
-            println!("Image already exists");
             return (
-                StatusCode::BAD_REQUEST,
+                StatusCode::PRECONDITION_FAILED,
                 "Image already exists on the server",
             )
                 .into_response();
@@ -197,6 +196,7 @@ pub async fn upload_image(
                 }
             }
         }
+        return (StatusCode::OK,file_uuid.to_string()).into_response();
     }
-    StatusCode::OK.into_response()
+    (StatusCode::BAD_REQUEST).into_response()
 }
