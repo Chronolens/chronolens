@@ -13,7 +13,7 @@ impl MigrationTrait for Migration {
                     .table(Cluster::Table)
                     .if_not_exists()
                     .col(integer(Cluster::Id).primary_key().auto_increment())
-                    .col(string(Cluster::FaceId))
+                    .col(integer(Cluster::FaceId))
                     .foreign_key(
                         ForeignKey::create()
                             .name("face_id")
