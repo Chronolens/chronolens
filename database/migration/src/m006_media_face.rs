@@ -1,4 +1,4 @@
-use crate::{m003_media::Media, m004_face::Face, m006_cluster::Cluster};
+use crate::{m003_media::Media, m005_cluster::Cluster};
 use sea_orm_migration::{prelude::*, schema::*};
 
 #[derive(DeriveMigrationName)]
