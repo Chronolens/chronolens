@@ -10,7 +10,7 @@ pub struct Model {
     pub media_id: String,
     pub embedding: Vec<f32>,
     pub face_bounding_box: Vec<f32>,
-    pub face_id: Option<i32>,
+    pub cluster_id: i32
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
@@ -23,15 +23,14 @@ pub enum Relation {
         on_delete = "NoAction"
     )]
     Media,
-
     #[sea_orm(
-        belongs_to = "super::face::Entity",
-        from = "Column::FaceId",
-        to = "super::face::Column::Id",
+        belongs_to = "super::cluster::Entity",
+        from = "Column::ClusterId",
+        to = "super::cluster::Column::Id",
         on_update = "NoAction",
         on_delete = "NoAction"
     )]
-    Face,
+    Cluster,
 }
 
 impl Related<super::media::Entity> for Entity {
@@ -40,9 +39,9 @@ impl Related<super::media::Entity> for Entity {
     }
 }
 
-impl Related<super::face::Entity> for Entity {
+impl Related<super::cluster::Entity> for Entity {
     fn to() -> RelationDef {
-        Relation::Face.def()
+        Relation::Cluster.def()
     }
 }
 

@@ -1,4 +1,4 @@
-use crate::{m003_media::Media, m004_face::Face};
+use crate::{m003_media::Media, m004_face::Face, m006_cluster::Cluster};
 use sea_orm_migration::{prelude::*, schema::*};
 
 #[derive(DeriveMigrationName)]
@@ -7,40 +7,6 @@ pub struct Migration;
 #[async_trait::async_trait]
 impl MigrationTrait for Migration {
     async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        print!(
-            "{}",
-            Table::create()
-                .table(FaceCluster::Table)
-                .if_not_exists()
-                .col(integer(FaceCluster::Id).primary_key())
-                .col(string(FaceCluster::MediaId))
-                .foreign_key(
-                    ForeignKey::create()
-                        .name("media_id")
-                        .from(FaceCluster::Table, FaceCluster::MediaId)
-                        .to(Media::Table, Media::Id),
-                )
-                .col(
-                    ColumnDef::new_with_type(FaceCluster::Embedding, ColumnType::Vector(Some(512)))
-                        .not_null()
-                )
-                .col(
-                    ColumnDef::new_with_type(
-                        FaceCluster::FaceBoundingBox,
-                        ColumnType::Vector(Some(4))
-                    )
-                    .not_null()
-                )
-                .col(integer_null(FaceCluster::FaceId))
-                .foreign_key(
-                    ForeignKey::create()
-                        .name("face_id")
-                        .from(FaceCluster::Table, FaceCluster::FaceId)
-                        .to(Face::Table, Face::Id),
-                )
-                .to_owned()
-                .build(PostgresQueryBuilder)
-        );
         manager
             .create_table(
                 Table::create()
@@ -68,12 +34,12 @@ impl MigrationTrait for Migration {
                         )
                         .not_null(),
                     )
-                    .col(integer_null(FaceCluster::FaceId))
+                    .col(integer(FaceCluster::ClusterId).auto_increment())
                     .foreign_key(
                         ForeignKey::create()
-                            .name("face_id")
-                            .from(FaceCluster::Table, FaceCluster::FaceId)
-                            .to(Face::Table, Face::Id),
+                            .name("cluster_id")
+                            .from(FaceCluster::Table, FaceCluster::ClusterId)
+                            .to(Cluster::Table, Cluster::Id),
                     )
                     .to_owned(),
             )
@@ -94,5 +60,5 @@ enum FaceCluster {
     MediaId,
     Embedding,
     FaceBoundingBox,
-    FaceId,
+    ClusterId,
 }
