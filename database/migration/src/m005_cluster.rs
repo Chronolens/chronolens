@@ -36,5 +36,5 @@ impl MigrationTrait for Migration {
 pub enum Cluster {
     Table,
     Id,
-    FaceId
+    FaceId,
 }

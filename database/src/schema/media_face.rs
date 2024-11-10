@@ -10,7 +10,7 @@ pub struct Model {
     pub media_id: String,
     pub embedding: Vec<f32>,
     pub face_bounding_box: Vec<f32>,
-    pub cluster_id: i32
+    pub cluster_id: i32,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
