@@ -4,8 +4,9 @@ mod m001_setup;
 mod m002_user;
 mod m003_media;
 mod m004_face;
-mod m005_face_cluster;
-mod m006_log;
+mod m005_media_face;
+mod m006_cluster;
+mod m007_log;
 
 pub struct Migrator;
 
@@ -17,8 +18,9 @@ impl MigratorTrait for Migrator {
             Box::new(m002_user::Migration),
             Box::new(m003_media::Migration),
             Box::new(m004_face::Migration),
-            Box::new(m005_face_cluster::Migration),
-            Box::new(m006_log::Migration),
+            Box::new(m005_media_face::Migration),
+            Box::new(m006_cluster::Migration),
+            Box::new(m007_log::Migration),
         ]
     }
 }
