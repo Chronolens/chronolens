@@ -10,35 +10,35 @@ impl MigrationTrait for Migration {
         manager
             .create_table(
                 Table::create()
-                    .table(FaceCluster::Table)
+                    .table(MediaFace::Table)
                     .if_not_exists()
-                    .col(integer(FaceCluster::Id).primary_key())
-                    .col(string(FaceCluster::MediaId))
+                    .col(integer(MediaFace::Id).primary_key().auto_increment())
+                    .col(string(MediaFace::MediaId))
                     .foreign_key(
                         ForeignKey::create()
                             .name("media_id")
-                            .from(FaceCluster::Table, FaceCluster::MediaId)
+                            .from(MediaFace::Table, MediaFace::MediaId)
                             .to(Media::Table, Media::Id),
                     )
                     .col(
                         ColumnDef::new_with_type(
-                            FaceCluster::Embedding,
+                            MediaFace::Embedding,
                             ColumnType::Vector(Some(512)),
                         )
                         .not_null(),
                     )
                     .col(
                         ColumnDef::new_with_type(
-                            FaceCluster::FaceBoundingBox,
+                            MediaFace::FaceBoundingBox,
                             ColumnType::Vector(Some(4)),
                         )
                         .not_null(),
                     )
-                    .col(integer(FaceCluster::ClusterId).auto_increment())
+                    .col(integer(MediaFace::ClusterId))
                     .foreign_key(
                         ForeignKey::create()
                             .name("cluster_id")
-                            .from(FaceCluster::Table, FaceCluster::ClusterId)
+                            .from(MediaFace::Table, MediaFace::ClusterId)
                             .to(Cluster::Table, Cluster::Id),
                     )
                     .to_owned(),
@@ -48,13 +48,13 @@ impl MigrationTrait for Migration {
 
     async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
         manager
-            .drop_table(Table::drop().table(FaceCluster::Table).to_owned())
+            .drop_table(Table::drop().table(MediaFace::Table).to_owned())
             .await
     }
 }
 
 #[derive(DeriveIden)]
-enum FaceCluster {
+enum MediaFace {
     Table,
     Id,
     MediaId,
