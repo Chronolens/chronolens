@@ -33,3 +33,4 @@ Cargo.lock
 
 .env
 .session.vim
+.secrets

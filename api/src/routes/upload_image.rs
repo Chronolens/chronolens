@@ -196,7 +196,7 @@ pub async fn upload_image(
                 }
             }
         }
-        return (StatusCode::OK,file_uuid.to_string()).into_response();
+        return (StatusCode::OK, file_uuid.to_string()).into_response();
     }
     (StatusCode::BAD_REQUEST).into_response()
 }
