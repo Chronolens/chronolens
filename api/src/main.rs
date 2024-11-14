@@ -15,7 +15,8 @@ use http::StatusCode;
 use jsonwebtoken::{decode, DecodingKey, Validation};
 use models::api_models::AccessTokenClaims;
 use routes::{
-    faces::faces, login::login, logs::logs, media::media, preview::preview, previews::previews, refresh::refresh, sync_full::sync_full, sync_partial::sync_partial, upload_image::upload_image
+    faces::faces, login::login, logs::logs, media::media, preview::preview, previews::previews,
+    refresh::refresh, sync_full::sync_full, sync_partial::sync_partial, upload_image::upload_image,
 };
 use s3::{creds::Credentials, error::S3Error, Bucket, BucketConfiguration, Region};
 use serde::Deserialize;

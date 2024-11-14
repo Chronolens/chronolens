@@ -14,18 +14,18 @@ pub struct Model {
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {
     #[sea_orm(
-        belongs_to = "super::media_face::Entity",
+        belongs_to = "super::media::Entity",
         from = "Column::FeaturedPhotoId",
-        to = "super::media_face::Column::Id",
+        to = "super::media::Column::Id",
         on_update = "NoAction",
         on_delete = "NoAction"
     )]
-    MediaFace,
+    Media,
 }
 
-impl Related<super::media_face::Entity> for Entity {
+impl Related<super::media::Entity> for Entity {
     fn to() -> RelationDef {
-        Relation::MediaFace.def()
+        Relation::Media.def()
     }
 }
 

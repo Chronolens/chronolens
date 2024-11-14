@@ -49,7 +49,7 @@ pub struct PreviewResponse {
 #[derive(Serialize)]
 pub struct GetFacesResponse {
     pub faces: Vec<FaceResponse>,
-    pub clusters: Vec<ClusterResponse>
+    pub clusters: Vec<ClusterResponse>,
 }
 
 #[derive(Serialize)]
@@ -57,12 +57,12 @@ pub struct FaceResponse {
     pub face_id: i32,
     pub name: String,
     pub photo_link: String,
-    pub bbox:  Vec<i32>
+    pub bbox: Vec<i32>,
 }
 
 #[derive(Serialize)]
 pub struct ClusterResponse {
     pub cluster_id: i32,
     pub photo_link: String,
-    pub bbox: Vec<i32>
+    pub bbox: Vec<i32>,
 }
