@@ -1,6 +1,6 @@
 pub mod schema;
 
-use migration::{Migrator, MigratorTrait};
+use migration::{ExprTrait, Migrator, MigratorTrait};
 use schema::{
     cluster, face, log,
     media::{self, ActiveModel},
@@ -331,12 +331,31 @@ impl DbManager {
     }
 
     pub async fn get_faces(&self, user_id: String) -> Result<(Vec<Face>, Vec<Cluster>), DbErr> {
-        let faces_with_clusters: Vec<(cluster::Model, Option<face::Model>)> =
+        // Query 1: Get all clusters *without* faces
+        let clusters_without_faces: Vec<(cluster::Model, Option<face::Model>)> =
             cluster::Entity::find()
-                .filter(cluster::Column::UserId.eq(user_id))
+                .filter(cluster::Column::UserId.eq(user_id.clone()))
+                .filter(face::Column::Id.is_null())
                 .find_also_related(face::Entity)
                 .all(&self.connection)
                 .await?;
+
+        // Query 2: Get distinct clusters *with* faces based on FaceId
+        let clusters_with_faces: Vec<(cluster::Model, Option<face::Model>)> =
+            cluster::Entity::find()
+                .filter(cluster::Column::UserId.eq(user_id.clone()))
+                .filter(face::Column::Id.is_not_null())
+                .find_also_related(face::Entity)
+                .distinct_on([cluster::Column::FaceId])
+                .all(&self.connection)
+                .await?;
+
+        // Combine results
+        let faces_with_clusters: Vec<(cluster::Model, Option<face::Model>)> =
+            clusters_without_faces
+                .into_iter()
+                .chain(clusters_with_faces.into_iter())
+                .collect();
 
         let mut faces: Vec<Face> = vec![];
         let mut clusters: Vec<Cluster> = vec![];
@@ -344,18 +363,24 @@ impl DbManager {
             if let Some(face) = face_opt {
                 let (photo_id, bbox) = if let Some(featured_photo_id) = &face.featured_photo_id {
                     media_face::Entity::find()
+                        .select_only()
+                        .select_column(media_face::Column::MediaId)
+                        .select_column(media_face::Column::FaceBoundingBox)
                         .filter(media_face::Column::MediaId.eq(featured_photo_id.clone()))
+                        .into_tuple()
                         .one(&self.connection)
                         .await?
-                        .map(|mf| (mf.media_id, mf.face_bounding_box))
-                        .unwrap_or_else(|| (String::new(), vec![]))
+                        .unwrap()
                 } else {
                     media_face::Entity::find()
+                        .select_only()
+                        .select_column(media_face::Column::MediaId)
+                        .select_column(media_face::Column::FaceBoundingBox)
                         .filter(media_face::Column::ClusterId.eq(cluster.id))
+                        .into_tuple()
                         .one(&self.connection)
                         .await?
-                        .map(|mf| (mf.media_id, mf.face_bounding_box))
-                        .unwrap_or_else(|| (String::new(), vec![]))
+                        .unwrap()
                 };
 
                 faces.push(Face {
@@ -364,15 +389,20 @@ impl DbManager {
                     photo_id,
                     bbox,
                 });
-            } else if let Some(media_face) = media_face::Entity::find()
-                .filter(media_face::Column::ClusterId.eq(cluster.id))
-                .one(&self.connection)
-                .await?
-            {
+            } else {
+                let (photo_id, bbox) = media_face::Entity::find()
+                    .select_only()
+                    .select_column(media_face::Column::MediaId)
+                    .select_column(media_face::Column::FaceBoundingBox)
+                    .filter(media_face::Column::ClusterId.eq(cluster.id))
+                    .into_tuple()
+                    .one(&self.connection)
+                    .await?
+                    .unwrap();
                 clusters.push(Cluster {
                     cluster_id: cluster.id,
-                    photo_id: media_face.media_id,
-                    bbox: media_face.face_bounding_box,
+                    photo_id,
+                    bbox,
                 });
             }
         }
