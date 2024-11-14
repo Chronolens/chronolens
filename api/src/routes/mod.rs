@@ -7,3 +7,4 @@ pub mod refresh;
 pub mod sync_full;
 pub mod sync_partial;
 pub mod upload_image;
+pub mod faces;
