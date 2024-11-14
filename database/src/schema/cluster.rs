@@ -7,6 +7,7 @@ use sea_orm::entity::prelude::*;
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = true)]
     pub id: i32,
+    pub user_id: String,
     pub face_id: Option<i32>,
 }
 
@@ -20,11 +21,26 @@ pub enum Relation {
         on_delete = "NoAction"
     )]
     Face,
+
+    #[sea_orm(
+        belongs_to = "super::user::Entity",
+        from = "Column::UserId",
+        to = "super::user::Column::Id",
+        on_update = "NoAction",
+        on_delete = "NoAction"
+    )]
+    User,
 }
 
 impl Related<super::face::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::Face.def()
+    }
+}
+
+impl Related<super::user::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::User.def()
     }
 }
 

@@ -27,14 +27,8 @@ impl MigrationTrait for Migration {
                         )
                         .not_null(),
                     )
-                    .col(
-                        ColumnDef::new_with_type(
-                            MediaFace::FaceBoundingBox,
-                            ColumnType::Vector(Some(4)),
-                        )
-                        .not_null(),
-                    )
-                    .col(integer(MediaFace::ClusterId))
+                    .col(ColumnDef::new(MediaFace::FaceBoundingBox).array(ColumnType::Integer).not_null())
+                    .col(integer(MediaFace::ClusterId).null())
                     .foreign_key(
                         ForeignKey::create()
                             .name("cluster_id")
@@ -54,7 +48,7 @@ impl MigrationTrait for Migration {
 }
 
 #[derive(DeriveIden)]
-enum MediaFace {
+pub enum MediaFace {
     Table,
     Id,
     MediaId,

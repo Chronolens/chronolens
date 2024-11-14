@@ -2,9 +2,9 @@ pub mod schema;
 
 use migration::{Migrator, MigratorTrait};
 use schema::{
-    log,
+    cluster, face, log,
     media::{self, ActiveModel},
-    user,
+    media_face, user,
 };
 use sea_orm::{
     entity::*, query::*, sqlx::types::chrono::Utc, ColumnTrait, ConnectOptions, Database,
@@ -329,6 +329,55 @@ impl DbManager {
             Err(_) => Err(AddLogError::InternalError),
         }
     }
+
+    pub async fn get_faces(&self, user_id: String) -> Result<(Vec<Face>, Vec<Cluster>), DbErr> {
+        let faces_with_clusters: Vec<(cluster::Model, Option<face::Model>)> =
+            cluster::Entity::find()
+                .filter(cluster::Column::UserId.eq(user_id))
+                .find_also_related(face::Entity)
+                .all(&self.connection)
+                .await?;
+
+        let mut faces: Vec<Face> = vec![];
+        let mut clusters: Vec<Cluster> = vec![];
+        for (cluster, face_opt) in faces_with_clusters {
+            if let Some(face) = face_opt {
+                let (photo_id, bbox) = if let Some(featured_photo_id) = &face.featured_photo_id {
+                    media_face::Entity::find()
+                        .filter(media_face::Column::MediaId.eq(featured_photo_id.clone()))
+                        .one(&self.connection)
+                        .await?
+                        .map(|mf| (mf.media_id, mf.face_bounding_box))
+                        .unwrap_or_else(|| (String::new(),vec![]))
+                } else {
+                    media_face::Entity::find()
+                        .filter(media_face::Column::ClusterId.eq(cluster.id))
+                        .one(&self.connection)
+                        .await?
+                        .map(|mf| (mf.media_id, mf.face_bounding_box))
+                        .unwrap_or_else(|| (String::new(), vec![]))
+                };
+
+                faces.push(Face {
+                    face_id: face.id,
+                    name: face.name.clone(),
+                    photo_id,
+                    bbox,
+                });
+            } else if let Some(media_face) = media_face::Entity::find()
+                .filter(media_face::Column::ClusterId.eq(cluster.id))
+                .one(&self.connection)
+                .await?
+            {
+                clusters.push(Cluster {
+                    cluster_id: cluster.id,
+                    photo_id: media_face.media_id,
+                    bbox: media_face.face_bounding_box,
+                });
+            }
+        }
+        Ok((faces, clusters))
+    }
 }
 
 pub enum GetPreviewError {
@@ -381,4 +430,19 @@ pub struct RemoteMediaAdded {
 #[serde(transparent)]
 pub struct RemoteMediaDeleted {
     pub id: String,
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone, FromQueryResult)]
+pub struct Face {
+    pub face_id: i32,
+    pub name: String,
+    pub photo_id: String,
+    pub bbox: Vec<i32>
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone, FromQueryResult)]
+pub struct Cluster {
+    pub cluster_id: i32,
+    pub photo_id: String,
+    pub bbox: Vec<i32>
 }
