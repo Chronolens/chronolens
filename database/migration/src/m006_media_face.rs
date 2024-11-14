@@ -27,8 +27,12 @@ impl MigrationTrait for Migration {
                         )
                         .not_null(),
                     )
-                    .col(ColumnDef::new(MediaFace::FaceBoundingBox).array(ColumnType::Integer).not_null())
-                    .col(integer(MediaFace::ClusterId).null())
+                    .col(
+                        ColumnDef::new(MediaFace::FaceBoundingBox)
+                            .array(ColumnType::Integer)
+                            .not_null(),
+                    )
+                    .col(integer_null(MediaFace::ClusterId))
                     .foreign_key(
                         ForeignKey::create()
                             .name("cluster_id")

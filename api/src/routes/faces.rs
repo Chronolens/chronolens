@@ -21,7 +21,7 @@ pub async fn faces(
             let sc2 = &server_config.clone();
             let face_futures: Vec<_> = faces
                 .into_iter()
-                .map(|face|async move {
+                .map(|face| async move {
                     let photo_link = sc1
                         .bucket
                         .presign_get(&face.photo_id, 86400, None)
@@ -62,6 +62,6 @@ pub async fn faces(
             )
                 .into_response()
         }
-        Err(err) => (StatusCode::INTERNAL_SERVER_ERROR,Json(err.to_string())).into_response(),
+        Err(err) => (StatusCode::INTERNAL_SERVER_ERROR, Json(err.to_string())).into_response(),
     }
 }

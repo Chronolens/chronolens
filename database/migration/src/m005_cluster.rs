@@ -13,14 +13,14 @@ impl MigrationTrait for Migration {
                     .table(Cluster::Table)
                     .if_not_exists()
                     .col(integer(Cluster::Id).primary_key().auto_increment())
-                    .col(integer(Cluster::UserId).null())
+                    .col(string(Cluster::UserId))
                     .foreign_key(
                         ForeignKey::create()
                             .name("user_id")
                             .from(Cluster::Table, Cluster::UserId)
                             .to(User::Table, User::Id),
                     )
-                    .col(integer(Cluster::FaceId).null())
+                    .col(integer_null(Cluster::FaceId))
                     .foreign_key(
                         ForeignKey::create()
                             .name("face_id")

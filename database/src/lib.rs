@@ -348,7 +348,7 @@ impl DbManager {
                         .one(&self.connection)
                         .await?
                         .map(|mf| (mf.media_id, mf.face_bounding_box))
-                        .unwrap_or_else(|| (String::new(),vec![]))
+                        .unwrap_or_else(|| (String::new(), vec![]))
                 } else {
                     media_face::Entity::find()
                         .filter(media_face::Column::ClusterId.eq(cluster.id))
@@ -437,12 +437,12 @@ pub struct Face {
     pub face_id: i32,
     pub name: String,
     pub photo_id: String,
-    pub bbox: Vec<i32>
+    pub bbox: Vec<i32>,
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone, FromQueryResult)]
 pub struct Cluster {
     pub cluster_id: i32,
     pub photo_id: String,
-    pub bbox: Vec<i32>
+    pub bbox: Vec<i32>,
 }
