@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use database::{RemoteMediaAdded, RemoteMediaDeleted};
 use serde::{Deserialize, Serialize};
 
@@ -43,7 +45,7 @@ pub struct PartialSyncResponse {
 #[derive(Serialize)]
 #[serde(transparent)]
 pub struct PreviewResponse {
-    pub previews: Vec<String>,
+    pub previews: HashMap<String,String>
 }
 
 #[derive(Serialize)]

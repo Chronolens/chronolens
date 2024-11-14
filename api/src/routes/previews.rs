@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use axum::{
     extract::{Query, State},
     response::{IntoResponse, Response},
@@ -30,18 +32,22 @@ pub async fn previews(
         .await
     {
         Ok(preview_ids) => {
-            // Generate URLs for each preview ID
-            let urls = join_all(
-                preview_ids
-                    .into_iter()
-                    .map(|preview_id| server_config.bucket.presign_get(preview_id, 86400, None)),
-            )
-            .await
-            .into_iter()
-            .filter_map(Result::ok)
-            .collect::<Vec<String>>();
-
-            // Return the list of URLs as JSON
+            // Generate URLs for each preview ID, returning a map of media_id to URL
+            let urls: HashMap<String, String> =
+                join_all(preview_ids.into_iter().map(|(media_id, preview_id)| {
+                    let bucket = server_config.bucket.clone();
+                    async move {
+                        // Generate presigned URL
+                        match bucket.presign_get(preview_id, 86400, None).await {
+                            Ok(url) => Some((media_id, url)), // Return (media_id, url) on success
+                            Err(_) => None,                   // Discard on failure
+                        }
+                    }
+                }))
+                .await
+                .into_iter()
+                .flatten()
+                .collect::<HashMap<String,String>>();
             (StatusCode::OK, Json(PreviewResponse { previews: urls })).into_response()
         }
         Err(GetPreviewError::InternalError) => (StatusCode::INTERNAL_SERVER_ERROR).into_response(),

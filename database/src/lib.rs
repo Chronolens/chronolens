@@ -236,22 +236,23 @@ impl DbManager {
         user_id: String,
         page: u64,
         page_size: u64,
-    ) -> Result<Vec<String>, GetPreviewError> {
+    ) -> Result<Vec<(String,String)>, GetPreviewError> {
         let offset = (page - 1) * page_size;
 
         match media::Entity::find()
             .order_by_desc(media::Column::CreatedAt)
             .select_only()
+            .select_column(media::Column::Id)
             .select_column(media::Column::PreviewId)
             .filter(media::Column::UserId.eq(user_id))
             .filter(media::Column::Deleted.eq(false))
             .offset(offset)
             .limit(page_size)
-            .into_tuple::<String>()
+            .into_tuple::<(String,String)>()
             .all(&self.connection)
             .await
         {
-            Ok(preview_ids) => Ok(preview_ids),
+            Ok(result) => Ok(result),
             Err(_) => Err(GetPreviewError::InternalError),
         }
     }
