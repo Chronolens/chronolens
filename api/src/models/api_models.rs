@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, fmt::Display};
 
 use database::{RemoteMediaAdded, RemoteMediaDeleted};
 use serde::{Deserialize, Serialize};
@@ -45,7 +45,13 @@ pub struct PartialSyncResponse {
 #[derive(Serialize)]
 #[serde(transparent)]
 pub struct PreviewResponse {
-    pub previews: HashMap<String,String>
+    pub previews: HashMap<String, String>,
+}
+
+#[derive(Serialize)]
+#[serde(transparent)]
+pub struct ClusterPreviewResponse {
+    pub previews: Vec<HashMap<String, String>>,
 }
 
 #[derive(Serialize)]
@@ -68,3 +74,17 @@ pub struct ClusterResponse {
     pub photo_link: String,
     pub bbox: Vec<i32>,
 }
+
+#[derive(Serialize,Debug,Clone)]
+pub struct PreviewItem {
+    pub id: String,
+    pub preview_link: String,
+}
+
+// impl Display for PreviewItem {
+//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+//         f.write_str(&self.id);
+//         f.write_str(&self.preview_link);
+//         Ok(())
+//     }
+// }

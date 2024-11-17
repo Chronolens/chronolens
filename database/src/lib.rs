@@ -236,7 +236,7 @@ impl DbManager {
         user_id: String,
         page: u64,
         page_size: u64,
-    ) -> Result<Vec<(String,String)>, GetPreviewError> {
+    ) -> Result<Vec<(String, String)>, GetPreviewError> {
         let offset = (page - 1) * page_size;
 
         match media::Entity::find()
@@ -248,12 +248,12 @@ impl DbManager {
             .filter(media::Column::Deleted.eq(false))
             .offset(offset)
             .limit(page_size)
-            .into_tuple::<(String,String)>()
+            .into_tuple::<(String, String)>()
             .all(&self.connection)
             .await
         {
             Ok(result) => Ok(result),
-            Err(_) => Err(GetPreviewError::InternalError),
+            Err(err) => Err(GetPreviewError::InternalError(err.to_string())),
         }
     }
 
@@ -274,7 +274,7 @@ impl DbManager {
         {
             Ok(Some(preview_id)) => Ok(preview_id),
             Ok(None) => Err(GetPreviewError::NotFound),
-            Err(_) => Err(GetPreviewError::InternalError),
+            Err(err) => Err(GetPreviewError::InternalError(err.to_string())),
         }
     }
 
@@ -410,52 +410,38 @@ impl DbManager {
         Ok((faces, clusters))
     }
 
-
     pub async fn get_cluster_previews(
         &self,
         user_id: String,
+        cluster_id: i32,
         page: u64,
         page_size: u64,
-    ) -> Result<Vec<(i32, String, String)>, &str> {
+    ) -> Result<Vec<(String, String)>, GetPreviewError> {
         let offset = (page - 1) * page_size;
-    
-        match cluster::Entity::find()
-            .filter(cluster::Column::UserId.eq(user_id))
-            .join(JoinType::LeftJoin, media_face::Relation::Cluster.def())
-            .join(JoinType::LeftJoin, media::Relation::User.def())
+
+        match media_face::Entity::find()
+            .filter(media_face::Column::ClusterId.eq(cluster_id))
+            .join(JoinType::LeftJoin, media_face::Relation::Media.def())
+            .filter(media::Column::UserId.eq(user_id))
+            .order_by_desc(media::Column::CreatedAt)
             .select_only()
-            .column_as(cluster::Column::Id, "cluster_id")
             .column_as(media::Column::Id, "media_id")
             .column_as(media::Column::PreviewId, "preview_id")
             .offset(offset)
             .limit(page_size)
-            .into_tuple::<(i32, String, Option<String>)>()
+            .into_tuple::<(String, String)>()
             .all(&self.connection)
             .await
         {
-            Ok(results) => {
-                let previews: Vec<(i32, String, String)> = results
-                    .into_iter()
-                    .filter_map(|(cluster_id, media_id, preview_id)| {
-                        preview_id.map(|preview_id| (cluster_id, media_id, preview_id))
-                    })
-                    .collect();
-    
-                Ok(previews)
-            }
-            Err(_) => Err("Failed to fetch cluster previews"),
+            Ok(results) => Ok(results),
+            Err(err) => Err(GetPreviewError::InternalError(err.to_string())),
         }
     }
-    
 }
-
-
-
-
 
 pub enum GetPreviewError {
     NotFound,
-    InternalError,
+    InternalError(String),
 }
 
 pub enum GetLogError {

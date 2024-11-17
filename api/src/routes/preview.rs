@@ -26,7 +26,7 @@ pub async fn preview(
                 .unwrap();
             (StatusCode::OK, url).into_response()
         }
-        Err(GetPreviewError::InternalError) => (StatusCode::INTERNAL_SERVER_ERROR).into_response(),
+        Err(GetPreviewError::InternalError(err)) => (StatusCode::INTERNAL_SERVER_ERROR,err).into_response(),
         Err(GetPreviewError::NotFound) => (
             StatusCode::UNAUTHORIZED,
             "Media does not exist or user does not have permissions to access it",
