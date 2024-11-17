@@ -47,7 +47,7 @@ pub async fn previews(
                 .await
                 .into_iter()
                 .flatten()
-                .collect::<HashMap<String,String>>();
+                .collect::<HashMap<String, String>>();
             (StatusCode::OK, Json(PreviewResponse { previews: urls })).into_response()
         }
         Err(GetPreviewError::InternalError) => (StatusCode::INTERNAL_SERVER_ERROR).into_response(),

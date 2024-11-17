@@ -1,4 +1,4 @@
-use crate::{m002_user::User, m003_media::Media};
+use crate::m003_media::Media;
 use sea_orm_migration::{prelude::*, schema::*};
 
 #[derive(DeriveMigrationName)]

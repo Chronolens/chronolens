@@ -1,3 +1,5 @@
+pub mod cluster_previews;
+pub mod face_previews;
 pub mod faces;
 pub mod login;
 pub mod logs;

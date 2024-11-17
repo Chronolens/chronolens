@@ -1,6 +1,6 @@
 pub mod schema;
 
-use migration::{ExprTrait, Migrator, MigratorTrait};
+use migration::{Migrator, MigratorTrait};
 use schema::{
     cluster, face, log,
     media::{self, ActiveModel},
@@ -236,7 +236,7 @@ impl DbManager {
         user_id: String,
         page: u64,
         page_size: u64,
-    ) -> Result<Vec<(String,String)>, GetPreviewError> {
+    ) -> Result<Vec<(String, String)>, GetPreviewError> {
         let offset = (page - 1) * page_size;
 
         match media::Entity::find()
@@ -248,7 +248,7 @@ impl DbManager {
             .filter(media::Column::Deleted.eq(false))
             .offset(offset)
             .limit(page_size)
-            .into_tuple::<(String,String)>()
+            .into_tuple::<(String, String)>()
             .all(&self.connection)
             .await
         {
@@ -408,6 +408,34 @@ impl DbManager {
             }
         }
         Ok((faces, clusters))
+    }
+
+    pub async fn get_cluster_previews(
+        &self,
+        user_id: String,
+        cluster_id: i32,
+        page: u64,
+        page_size: u64,
+    ) -> Result<Vec<(String, String)>, GetPreviewError> {
+        let offset = (page - 1) * page_size;
+
+        match media_face::Entity::find()
+            .filter(media_face::Column::ClusterId.eq(cluster_id))
+            .join(JoinType::LeftJoin, media_face::Relation::Media.def())
+            .filter(media::Column::UserId.eq(user_id))
+            .order_by_desc(media::Column::CreatedAt)
+            .select_only()
+            .column_as(media::Column::Id, "media_id")
+            .column_as(media::Column::PreviewId, "preview_id")
+            .offset(offset)
+            .limit(page_size)
+            .into_tuple::<(String, String)>()
+            .all(&self.connection)
+            .await
+        {
+            Ok(results) => Ok(results),
+            Err(_) => Err(GetPreviewError::InternalError),
+        }
     }
 }
 
