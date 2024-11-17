@@ -115,6 +115,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/media/:media_id", get(media))
         .route("/logs", get(logs))
         .route("/faces", get(faces))
+        .route("/face/:cluster_id", get(face));
+        .route("/cluster/:face_id", get(cluster));
         .layer(middleware::from_fn_with_state(
             server_config.secret.clone(),
             auth_middleware,

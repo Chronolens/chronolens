@@ -409,7 +409,49 @@ impl DbManager {
         }
         Ok((faces, clusters))
     }
+
+
+    pub async fn get_cluster_previews(
+        &self,
+        user_id: String,
+        page: u64,
+        page_size: u64,
+    ) -> Result<Vec<(i32, String, String)>, &str> {
+        let offset = (page - 1) * page_size;
+    
+        match cluster::Entity::find()
+            .filter(cluster::Column::UserId.eq(user_id))
+            .join(JoinType::LeftJoin, media_face::Relation::Cluster.def())
+            .join(JoinType::LeftJoin, media::Relation::User.def())
+            .select_only()
+            .column_as(cluster::Column::Id, "cluster_id")
+            .column_as(media::Column::Id, "media_id")
+            .column_as(media::Column::PreviewId, "preview_id")
+            .offset(offset)
+            .limit(page_size)
+            .into_tuple::<(i32, String, Option<String>)>()
+            .all(&self.connection)
+            .await
+        {
+            Ok(results) => {
+                let previews: Vec<(i32, String, String)> = results
+                    .into_iter()
+                    .filter_map(|(cluster_id, media_id, preview_id)| {
+                        preview_id.map(|preview_id| (cluster_id, media_id, preview_id))
+                    })
+                    .collect();
+    
+                Ok(previews)
+            }
+            Err(_) => Err("Failed to fetch cluster previews"),
+        }
+    }
+    
 }
+
+
+
+
 
 pub enum GetPreviewError {
     NotFound,
