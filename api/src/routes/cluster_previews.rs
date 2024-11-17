@@ -12,7 +12,7 @@ use crate::{models::api_models::PreviewItem, ServerConfig};
 #[derive(Deserialize)]
 pub struct ClusterPagination {
     page: Option<u64>,
-    page_size: Option<u64>
+    page_size: Option<u64>,
 }
 
 pub async fn cluster_previews(
@@ -48,10 +48,9 @@ pub async fn cluster_previews(
             .into_iter()
             .flatten()
             .collect();
-            // Json(previews.clone()).to_vec().iter().for_each(|it| println!("{} ",it));
             (StatusCode::OK, Json(previews)).into_response()
         }
-        Err(GetPreviewError::InternalError(err)) => (StatusCode::INTERNAL_SERVER_ERROR,err).into_response(),
+        Err(GetPreviewError::InternalError) => (StatusCode::INTERNAL_SERVER_ERROR).into_response(),
         Err(GetPreviewError::NotFound) => (
             StatusCode::UNAUTHORIZED,
             "Cluster does not exist or user does not have permissions to access it",

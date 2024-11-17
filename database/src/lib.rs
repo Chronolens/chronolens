@@ -1,6 +1,6 @@
 pub mod schema;
 
-use migration::{ExprTrait, Migrator, MigratorTrait};
+use migration::{Migrator, MigratorTrait};
 use schema::{
     cluster, face, log,
     media::{self, ActiveModel},
@@ -253,7 +253,7 @@ impl DbManager {
             .await
         {
             Ok(result) => Ok(result),
-            Err(err) => Err(GetPreviewError::InternalError(err.to_string())),
+            Err(_) => Err(GetPreviewError::InternalError),
         }
     }
 
@@ -274,7 +274,7 @@ impl DbManager {
         {
             Ok(Some(preview_id)) => Ok(preview_id),
             Ok(None) => Err(GetPreviewError::NotFound),
-            Err(err) => Err(GetPreviewError::InternalError(err.to_string())),
+            Err(_) => Err(GetPreviewError::InternalError),
         }
     }
 
@@ -434,14 +434,14 @@ impl DbManager {
             .await
         {
             Ok(results) => Ok(results),
-            Err(err) => Err(GetPreviewError::InternalError(err.to_string())),
+            Err(_) => Err(GetPreviewError::InternalError),
         }
     }
 }
 
 pub enum GetPreviewError {
     NotFound,
-    InternalError(String),
+    InternalError,
 }
 
 pub enum GetLogError {

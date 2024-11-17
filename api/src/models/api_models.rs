@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fmt::Display};
+use std::collections::HashMap;
 
 use database::{RemoteMediaAdded, RemoteMediaDeleted};
 use serde::{Deserialize, Serialize};
@@ -75,7 +75,7 @@ pub struct ClusterResponse {
     pub bbox: Vec<i32>,
 }
 
-#[derive(Serialize,Debug,Clone)]
+#[derive(Serialize, Debug, Clone)]
 pub struct PreviewItem {
     pub id: String,
     pub preview_link: String,
