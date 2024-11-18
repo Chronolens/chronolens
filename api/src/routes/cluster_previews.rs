@@ -5,21 +5,15 @@ use axum::{
 };
 use database::GetPreviewError;
 use http::StatusCode;
-use serde::Deserialize;
 
-use crate::{models::api_models::PreviewItem, ServerConfig};
+use crate::{models::api_models::{PreviewItem, Pagination}, ServerConfig};
 
-#[derive(Deserialize)]
-pub struct ClusterPagination {
-    page: Option<u64>,
-    page_size: Option<u64>,
-}
 
 pub async fn cluster_previews(
     State(server_config): State<ServerConfig>,
     Extension(user_id): Extension<String>,
     Path(cluster_id): Path<i32>,
-    Query(params): Query<ClusterPagination>,
+    Query(params): Query<Pagination>,
 ) -> Response {
     let page = params.page.unwrap_or(1).max(1);
     let page_size = params.page_size.unwrap_or(10).clamp(1, 30);
@@ -37,7 +31,7 @@ pub async fn cluster_previews(
                         match bucket.presign_get(preview_id, 86400, None).await {
                             Ok(url) => Some(PreviewItem {
                                 id: media_id,
-                                preview_link: url,
+                                preview_url: url,
                             }),
                             Err(_) => None,
                         }
