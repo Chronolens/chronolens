@@ -1,11 +1,11 @@
 use axum::{
     extract::{Path, State},
     response::{IntoResponse, Response},
-    Extension,
+    Extension, Json,
 };
 use http::StatusCode;
 
-use crate::ServerConfig;
+use crate::{models::api_models::MediaMetadataResponse, ServerConfig};
 
 pub async fn media(
     State(server_config): State<ServerConfig>,
@@ -28,12 +28,43 @@ pub async fn media(
     };
 
     if user_has_media {
-        let url = server_config
+        let media = match server_config.database.get_media(media_id.clone()).await {
+            Ok(Some(media)) => media,
+            Ok(None) => {
+                return (
+                    StatusCode::FORBIDDEN,
+                    "Media does not exist or user does not have permissions to access it",
+                )
+                    .into_response();
+            }
+            Err(..) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Error fetching media metadata",
+                )
+                    .into_response();
+            }
+        };
+        let url = match server_config
             .bucket
             .presign_get(media_id, 86400, None)
             .await
-            .unwrap();
-        (StatusCode::OK, url).into_response()
+        {
+            Ok(url) => url,
+            Err(..) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Error creating media presigned url",
+                )
+                    .into_response();
+            }
+        };
+        let media_metadata = MediaMetadataResponse {
+            id: media.id,
+            created_at: media.created_at,
+            media_url: url,
+        };
+        (StatusCode::OK, Json(media_metadata)).into_response()
     } else {
         (
             StatusCode::FORBIDDEN,

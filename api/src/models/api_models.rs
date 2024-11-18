@@ -86,3 +86,11 @@ pub struct PreviewItem {
     pub id: String,
     pub preview_url: String,
 }
+
+
+#[derive(Serialize)]
+pub struct MediaMetadataResponse {
+    pub id: String,
+    pub media_url: String,
+    pub created_at: i64,
+}
