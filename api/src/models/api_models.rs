@@ -75,16 +75,14 @@ pub struct ClusterResponse {
     pub bbox: Vec<i32>,
 }
 
+#[derive(Deserialize)]
+pub struct Pagination {
+    pub page: Option<u64>,
+    pub page_size: Option<u64>,
+}
+
 #[derive(Serialize, Debug, Clone)]
 pub struct PreviewItem {
     pub id: String,
-    pub preview_link: String,
+    pub preview_url: String,
 }
-
-// impl Display for PreviewItem {
-//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-//         f.write_str(&self.id);
-//         f.write_str(&self.preview_link);
-//         Ok(())
-//     }
-// }
