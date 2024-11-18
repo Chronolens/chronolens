@@ -139,6 +139,7 @@ pub async fn handle_request(msg: Message, bucket: Box<Bucket>, db: DbManager) {
     }
     let _ = preview.write_to(&mut Cursor::new(&mut preview_bytes), preview_format);
 
+    let mut preview_id = source_image_id.clone();
     preview_id.insert_str(0, PREVIEW_ID_PREFIX);
     let preview_response_data = match bucket
         .put_object_with_content_type(&preview_id, &preview_bytes, preview_content_type)
