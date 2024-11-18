@@ -91,6 +91,11 @@ impl DbManager {
             .exec(&self.connection)
             .await
     }
+    pub async fn get_media(&self, media_id: String) -> Result<Option<media::Model>, DbErr> {
+        media::Entity::find_by_id(&media_id)
+            .one(&self.connection)
+            .await
+    }
 
     async fn _delete_media(&self, media_id: i32, user_id: i32) -> Result<(), &'static str> {
         // Find the photo to be deleted
@@ -438,8 +443,6 @@ impl DbManager {
         }
     }
 
-
-
     pub async fn get_face_previews(
         &self,
         user_id: String,
@@ -448,7 +451,7 @@ impl DbManager {
         page_size: u64,
     ) -> Result<Vec<(String, String)>, GetPreviewError> {
         let offset = (page - 1) * page_size;
-    
+
         match media_face::Entity::find()
             // Join media_face with cluster on cluster_id
             .join(JoinType::InnerJoin, media_face::Relation::Cluster.def())
@@ -475,13 +478,7 @@ impl DbManager {
             Err(_) => Err(GetPreviewError::InternalError),
         }
     }
-    
-    
-
-
 }
-
-
 
 pub enum GetPreviewError {
     NotFound,
