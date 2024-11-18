@@ -437,7 +437,51 @@ impl DbManager {
             Err(_) => Err(GetPreviewError::InternalError),
         }
     }
+
+
+
+    pub async fn get_face_previews(
+        &self,
+        user_id: String,
+        face_id: i32,
+        page: u64,
+        page_size: u64,
+    ) -> Result<Vec<(String, String)>, GetPreviewError> {
+        let offset = (page - 1) * page_size;
+    
+        match media_face::Entity::find()
+            // Join media_face with cluster on cluster_id
+            .join(JoinType::InnerJoin, media_face::Relation::Cluster.def())
+            // Filter clusters that have the specified face_id
+            .filter(cluster::Column::FaceId.eq(face_id))
+            // Join media_face with media on media_id (Left join to include all media_face rows)
+            .join(JoinType::LeftJoin, media_face::Relation::Media.def())
+            // Filter by the provided user_id
+            .filter(media::Column::UserId.eq(user_id))
+            // Order by media created_at in descending order
+            .order_by_desc(media::Column::CreatedAt)
+            // Select only media_id and preview_id
+            .select_only()
+            .column_as(media::Column::Id, "media_id")
+            .column_as(media::Column::PreviewId, "preview_id")
+            // Apply pagination with offset and limit
+            .offset(offset)
+            .limit(page_size)
+            .into_tuple::<(String, String)>()
+            .all(&self.connection)
+            .await
+        {
+            Ok(results) => Ok(results),
+            Err(_) => Err(GetPreviewError::InternalError),
+        }
+    }
+    
+    
+
+
 }
+
+
 
 pub enum GetPreviewError {
     NotFound,
