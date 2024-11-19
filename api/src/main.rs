@@ -15,7 +15,7 @@ use http::StatusCode;
 use jsonwebtoken::{decode, DecodingKey, Validation};
 use models::api_models::AccessTokenClaims;
 use routes::{
-    cluster_previews::cluster_previews, face_previews::face_previews, faces::faces, login::login, logs::logs, media::media,
+    clip_search::clip_search, cluster_previews::cluster_previews, face_previews::face_previews, faces::faces, login::login, logs::logs, media::media,
     preview::preview, previews::previews, refresh::refresh, sync_full::sync_full,
     sync_partial::sync_partial, upload_image::upload_image,
 };
@@ -118,6 +118,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/faces", get(faces))
         .route("/cluster/:cluster_id", get(cluster_previews))
         .route("/face/:face_id", get(face_previews))
+        .route("/search", get(clip_search))
         .layer(middleware::from_fn_with_state(
             server_config.secret.clone(),
             auth_middleware,

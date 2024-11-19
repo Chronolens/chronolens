@@ -94,3 +94,11 @@ pub struct MediaMetadataResponse {
     pub media_url: String,
     pub created_at: i64,
 }
+
+
+#[derive(Deserialize)]
+pub struct SearchQuery {
+    pub query: String,
+    pub page: Option<u32>,      
+    pub page_size: Option<u32>, 
+}

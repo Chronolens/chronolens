@@ -5,7 +5,6 @@ use axum::{
 };
 use database::GetPreviewError;
 use http::StatusCode;
-use serde::Deserialize;
 
 use crate::{models::api_models::PreviewItem, models::api_models::Pagination, ServerConfig};
 
