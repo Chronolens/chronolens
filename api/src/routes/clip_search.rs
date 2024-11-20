@@ -5,6 +5,7 @@ use axum::{
 };
 use http::StatusCode;
 use tokio_util::bytes::Bytes; 
+use serde_json::json; 
 use crate::{ServerConfig, models::api_models::{PreviewItem, SearchQuery}};
 
 pub async fn clip_search(
@@ -20,19 +21,21 @@ pub async fn clip_search(
         return (StatusCode::BAD_REQUEST, "Query is required").into_response(); 
     }
 
-    
-    let query_bytes = Bytes::from(query.clone()); 
+    let message = json!({
+        "user_id": user_id,
+        "query": query,
+    });
 
-    
+    let message_bytes = Bytes::from(serde_json::to_vec(&message).unwrap());
+
     match server_config
         .nats_jetstream
-        .publish("clip-process", query_bytes) 
+        .publish("clip-process", message_bytes) 
         .await
     {
         Ok(_) => (), 
         Err(..) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     };
 
-    
     (StatusCode::OK, Json("Query sent successfully")).into_response()
 }
