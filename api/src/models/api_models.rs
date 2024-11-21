@@ -81,7 +81,7 @@ pub struct Pagination {
     pub page_size: Option<u64>,
 }
 
-#[derive(Serialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct PreviewItem {
     pub id: String,
     pub preview_url: String,

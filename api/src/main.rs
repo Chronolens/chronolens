@@ -28,6 +28,7 @@ pub struct ServerConfig {
     pub secret: String,
     pub bucket: Box<Bucket>,
     pub nats_jetstream: async_nats::jetstream::Context,
+    pub nats_client: async_nats::Client,
 }
 
 #[derive(Deserialize, Debug)]
@@ -85,21 +86,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Err(err) => panic!("{}", err),
     };
 
-    let client = match async_nats::connect(environment_variables.nats_endpoint).await {
+    let nats_client = match async_nats::connect(environment_variables.nats_endpoint.clone()).await {
         Ok(c) => c,
         Err(err) => {
-            panic!("Couldn't connect nats client: {err}");
+            panic!("Couldn't connect to NATS client: {err}");
         }
     };
-    let nats_jetstream = async_nats::jetstream::new(client);
+    
+    let nats_jetstream = async_nats::jetstream::new(nats_client.clone());
 
     let server_config = ServerConfig {
         database,
         secret,
         bucket,
         nats_jetstream,
+        nats_client, 
     };
-    // build our application with a route
+    
+
     let public_routes = Router::new()
         .route("/login", post(login))
         .route("/refresh", post(refresh));
