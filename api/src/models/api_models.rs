@@ -64,14 +64,14 @@ pub struct GetFacesResponse {
 pub struct FaceResponse {
     pub face_id: i32,
     pub name: String,
-    pub photo_link: String,
+    pub photo_url: String,
     pub bbox: Vec<i32>,
 }
 
 #[derive(Serialize)]
 pub struct ClusterResponse {
     pub cluster_id: i32,
-    pub photo_link: String,
+    pub photo_url: String,
     pub bbox: Vec<i32>,
 }
 
