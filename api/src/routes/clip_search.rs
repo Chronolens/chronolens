@@ -56,15 +56,16 @@ pub async fn clip_search(
 
     let preview_items: Result<Vec<PreviewItem>, _> = serde_json::from_str(&response_data);
 
-    println!("{:?}", preview_items);
-    
+    // println!("{:?}", preview_items);
+
     match preview_items {
         Ok(items) => {
-            Json(json!({ "data": items })).into_response()
+            Json(json!(items)).into_response() // Return the array directly
         }
         Err(e) => {
             eprintln!("Failed to deserialize response data: {}", e);
-            return (StatusCode::INTERNAL_SERVER_ERROR, "Error deserializing response").into_response();
+            (StatusCode::INTERNAL_SERVER_ERROR, "Error deserializing response").into_response()
         }
     }
+
 }
