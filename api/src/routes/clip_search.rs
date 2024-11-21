@@ -24,6 +24,8 @@ pub async fn clip_search(
     let message = json!({
         "user_id": user_id,
         "query": query,
+        "page": page,
+        "page_size": page_size,
     });
 
     let message_bytes = Bytes::from(serde_json::to_vec(&message).unwrap());
