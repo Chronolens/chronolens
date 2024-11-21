@@ -6,8 +6,10 @@ use axum::{
 use database::GetPreviewError;
 use http::StatusCode;
 
-use crate::{models::api_models::{PreviewItem, Pagination}, ServerConfig};
-
+use crate::{
+    models::api_models::{Pagination, PreviewItem},
+    ServerConfig,
+};
 
 pub async fn cluster_previews(
     State(server_config): State<ServerConfig>,
