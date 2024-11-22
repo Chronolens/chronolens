@@ -64,14 +64,14 @@ pub struct GetFacesResponse {
 pub struct FaceResponse {
     pub face_id: i32,
     pub name: String,
-    pub photo_link: String,
+    pub photo_url: String,
     pub bbox: Vec<i32>,
 }
 
 #[derive(Serialize)]
 pub struct ClusterResponse {
     pub cluster_id: i32,
-    pub photo_link: String,
+    pub photo_url: String,
     pub bbox: Vec<i32>,
 }
 
@@ -81,7 +81,7 @@ pub struct Pagination {
     pub page_size: Option<u64>,
 }
 
-#[derive(Serialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct PreviewItem {
     pub id: String,
     pub preview_url: String,
@@ -92,4 +92,12 @@ pub struct MediaMetadataResponse {
     pub id: String,
     pub media_url: String,
     pub created_at: i64,
+}
+
+
+#[derive(Deserialize)]
+pub struct SearchQuery {
+    pub query: String,
+    pub page: Option<u32>,      
+    pub page_size: Option<u32>, 
 }

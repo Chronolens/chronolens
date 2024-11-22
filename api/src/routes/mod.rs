@@ -1,3 +1,4 @@
+pub mod clip_search;
 pub mod cluster_previews;
 pub mod face_previews;
 pub mod faces;
