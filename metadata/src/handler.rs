@@ -41,19 +41,21 @@ pub async fn handle_request(msg: Message, bucket: Box<Bucket>, db: DbManager) {
             let photographic_sensitivity = extract_photographic_sensitivity(&exifdata);
             let orientation = extract_orientation(&exifdata);
 
-            let _ = db.insert_metadata(
-                source_media_id,
-                longitude,
-                latitude,
-                image_width,
-                image_length,
-                make,
-                model,
-                fnumber,
-                exposure_time,
-                photographic_sensitivity,
-                orientation,
-            ).await;
+            let _ = db
+                .insert_metadata(
+                    source_media_id,
+                    longitude,
+                    latitude,
+                    image_width,
+                    image_length,
+                    make,
+                    model,
+                    fnumber,
+                    exposure_time,
+                    photographic_sensitivity,
+                    orientation,
+                )
+                .await;
         }
         Err(e) => panic!("Error reading exif {e}"),
     };

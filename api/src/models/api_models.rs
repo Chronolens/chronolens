@@ -92,6 +92,18 @@ pub struct MediaMetadataResponse {
     pub id: String,
     pub media_url: String,
     pub created_at: i64,
+    pub file_size: i64,
+    pub file_name: String,
+    pub longitude: Option<f64>,
+    pub latitude: Option<f64>,
+    pub image_width: Option<i32>,
+    pub image_length: Option<i32>,
+    pub make: Option<String>,
+    pub model: Option<String>,
+    pub fnumber: Option<String>,
+    pub exposure_time: Option<String>,
+    pub photographic_sensitivity: Option<String>,
+    pub orientation: Option<i32>,
 }
 
 #[derive(Deserialize)]

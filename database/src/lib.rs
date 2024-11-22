@@ -77,7 +77,7 @@ impl DbManager {
         checksum: String,
         timestamp: i64,
         file_size: i64,
-        file_name: String
+        file_name: String,
     ) -> Result<InsertResult<ActiveModel>, DbErr> {
         let media_to_insert = media::ActiveModel {
             id: Set(media_id),
@@ -531,7 +531,6 @@ impl DbManager {
             )),
         }
     }
-
 }
 
 pub enum GetPreviewError {
