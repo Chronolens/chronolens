@@ -76,6 +76,8 @@ impl DbManager {
         media_id: String,
         checksum: String,
         timestamp: i64,
+        file_size: i64,
+        file_name: String,
     ) -> Result<InsertResult<ActiveModel>, DbErr> {
         let media_to_insert = media::ActiveModel {
             id: Set(media_id),
@@ -84,6 +86,8 @@ impl DbManager {
             created_at: Set(timestamp),
             last_modified_at: Set(Utc::now().timestamp_millis()),
             deleted: Set(false),
+            file_name: Set(file_name),
+            file_size: Set(file_size),
             ..Default::default()
         };
 
@@ -91,6 +95,7 @@ impl DbManager {
             .exec(&self.connection)
             .await
     }
+
     pub async fn get_media(&self, media_id: String) -> Result<Option<media::Model>, DbErr> {
         media::Entity::find_by_id(&media_id)
             .one(&self.connection)
@@ -132,6 +137,7 @@ impl DbManager {
             Err(..) => Err(GetUserError::InternalError),
         }
     }
+
     pub async fn update_media_preview(
         &self,
         media_id: String,
@@ -471,6 +477,58 @@ impl DbManager {
         {
             Ok(results) => Ok(results),
             Err(_) => Err(GetPreviewError::InternalError),
+        }
+    }
+
+    pub async fn insert_metadata(
+        &self,
+        media_id: String,
+        longitude: Option<f64>,
+        latitude: Option<f64>,
+        image_width: Option<i32>,
+        image_length: Option<i32>,
+        make: Option<String>,
+        model: Option<String>,
+        fnumber: Option<String>,
+        exposure_time: Option<String>,
+        photographic_sensitivity: Option<String>,
+        orientation: Option<i32>,
+    ) -> Result<(), String> {
+        let Ok(media) = media::Entity::find_by_id(&media_id)
+            .one(&self.connection)
+            .await
+        else {
+            return Err(format!(
+                "Database error while fetching media: {}",
+                media_id.clone()
+            ));
+        };
+
+        let Some(media) = media else {
+            return Err(format!(
+                "Could not find media: {} in the database",
+                media_id.clone()
+            ));
+        };
+
+        let mut media: media::ActiveModel = media.into();
+        media.longitude = Set(longitude);
+        media.latitude = Set(latitude);
+        media.image_width = Set(image_width);
+        media.image_length = Set(image_length);
+        media.make = Set(make);
+        media.model = Set(model);
+        media.fnumber = Set(fnumber);
+        media.exposure_time = Set(exposure_time);
+        media.photographic_sensitivity = Set(photographic_sensitivity);
+        media.orientation = Set(orientation);
+
+        match media.update(&self.connection).await {
+            Ok(_) => Ok(()),
+            Err(_) => Err(format!(
+                "Could not update media preview id for: {}",
+                media_id.clone()
+            )),
         }
     }
 }

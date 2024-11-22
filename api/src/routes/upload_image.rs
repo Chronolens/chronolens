@@ -67,7 +67,7 @@ pub async fn upload_image(
                 .into_response();
         }
 
-        // FIX: UNCOMMENT THIS CONDITION!
+        // FIXME: UNCOMMENT THIS CONDITION!
 
         //if ALLOWED_CONTENT_TYPES.contains(&content_type.as_str()) {
         //    return StatusCode::UNSUPPORTED_MEDIA_TYPE.into_response();
@@ -75,6 +75,11 @@ pub async fn upload_image(
 
         //Generate the media UUID
         let file_uuid = uuid::Uuid::new_v4();
+
+        let file_name = field
+            .file_name()
+            .map(ToString::to_string)
+            .unwrap_or(file_uuid.to_string().to_owned());
 
         let Ok(multipart_upload) = server_config
             .bucket
@@ -86,11 +91,13 @@ pub async fn upload_image(
         let mut part_number = 1;
         let mut completed_parts = vec![];
         let mut chunk_builder: Vec<u8> = vec![];
+        let mut file_size: i64 = 0;
 
         loop {
             match field.chunk().await {
                 // Case when there's a new chunk of data
                 Ok(Some(data)) => {
+                    file_size += data.len() as i64;
                     if chunk_builder.len() >= (5 * 1024 * 1024) {
                         let Ok(upload_response) = server_config
                             .bucket
@@ -153,6 +160,8 @@ pub async fn upload_image(
                                     file_uuid.to_string(),
                                     digest,
                                     timestamp,
+                                    file_size,
+                                    file_name,
                                 )
                                 .await
                             else {
@@ -181,12 +190,23 @@ pub async fn upload_image(
                     // Step 5: publish ml embeddings generation request
                     let _ = match server_config
                         .nats_jetstream
-                        .publish("image-process", file_uuid_bytes)
+                        .publish("image-process", file_uuid_bytes.clone())
                         .await
                     {
                         Ok(publish_ack) => publish_ack,
                         Err(..) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
                     };
+
+                    // Step 6: publish metadata request
+                    let _ = match server_config
+                        .nats_jetstream
+                        .publish("metadata", file_uuid_bytes)
+                        .await
+                    {
+                        Ok(publish_ack) => publish_ack,
+                        Err(..) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+                    };
+
                     break;
                 }
                 // Case when an error occurs

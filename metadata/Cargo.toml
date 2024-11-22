@@ -1,0 +1,16 @@
+[package]
+name = "metadata"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+async-nats = "0.37.0"
+database = { path = "../database"}
+dotenvy = "0.15.7"
+envy = "0.4.2"
+futures-util = "0.3.31"
+kamadak-exif = "0.6.1"
+log = "0.4.22"
+rust-s3 = "0.35.1"
+serde = "1.0.214"
+tokio = { version = "1.41.0", features = ["full"] }
