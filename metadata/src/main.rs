@@ -1,6 +1,6 @@
 mod handler;
 use database::DbManager;
-use exif::Reader;
+use exif::{Reader, Tag};
 use futures_util::StreamExt;
 use handler::handle_request;
 use log::{error, info};
@@ -33,46 +33,45 @@ fn object_storage_endpoint_default() -> String {
     "http://localhost".to_string()
 }
 
+// #[tokio::main]
+// async fn main() -> Result<(), Box<dyn Error>>  {
+//     dotenvy::dotenv().ok();
+//     let envs = match envy::from_env::<EnvVars>() {
+//         Ok(vars) => vars,
+//         Err(err) => panic!("{}", err),
+//     };
+//     let bucket = match setup_bucket(&envs).await{
+//         Ok(bucket) => bucket,
+//         Err(err) => panic!("Error setting up bucket {err}")
+//     };
+
+//     //4dae35d7-7674-44a4-91e4-94b32dbad5f5
+//     //f3cb8435-a086-42ae-8410-db0f60881c63
+//     //7ee52a0f-9f3c-42ec-937d-822b1b78cc39
+//     let source_media_id = "4d7ec44a-c0f9-4310-bb74-6126c3e76c89";
+//     let source_media_response = match bucket.get_object(source_media_id).await {
+//         Ok(oir) => oir,
+//         Err(err) => {
+//             panic!("Get object failed: {err}");
+//         }
+//     };
+
+//     let source_media_bytes = source_media_response.bytes();
+//     let image_size = source_media_bytes.len();
+//     let mut bufreader = Cursor::new(source_media_bytes);
+//     let exifreader = Reader::new();
+//     match exifreader.read_from_container(&mut bufreader) {
+//         Ok(exifdata) => {
+
+//             extract_metadata(&exifdata);
+//         }
+//         Err(err) => panic!("Error reading exif: {err}"),
+//     };
+//     Ok(())
+// }
+
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn Error>>  {
-    dotenvy::dotenv().ok();
-    let envs = match envy::from_env::<EnvVars>() {
-        Ok(vars) => vars,
-        Err(err) => panic!("{}", err),
-    };
-    let bucket = match setup_bucket(&envs).await{
-        Ok(bucket) => bucket,
-        Err(err) => panic!("Error setting up bucket {err}")
-    };
-
-    let source_media_id = "dawdawdawdaw";
-    let source_media_response = match bucket.get_object(source_media_id.clone()).await {
-        Ok(oir) => oir,
-        Err(err) => {
-            panic!("Get object failed: {err}");
-        }
-    };
-
-    let source_media_bytes = source_media_response.bytes();
-    let mut bufreader = Cursor::new(source_media_bytes);
-    let exifreader = Reader::new();
-    match exifreader.read_from_container(&mut bufreader) {
-        Ok(exifdata) => {
-            for f in exifdata.fields() {
-                println!(
-                    "{} {} {}",
-                    f.tag,
-                    f.ifd_num,
-                    f.display_value().with_unit(&exifdata)
-                );
-            }
-        }
-        Err(..) => panic!("Error reading exif"),
-    };
-    Ok(())
-}
-
-async fn main2() -> Result<(), Box<dyn Error>> {
+async fn main() -> Result<(), Box<dyn Error>> {
     dotenvy::dotenv().ok();
     let envs = match envy::from_env::<EnvVars>() {
         Ok(vars) => vars,
@@ -103,7 +102,7 @@ async fn main2() -> Result<(), Box<dyn Error>> {
         })
         .await?;
 
-    // FIX: crate a const or a env var for the preview consumer
+    // FIXME: crate a const or a env var for the preview consumer
     let consumer = stream
         .get_or_create_consumer(
             "metadata_consumer",
@@ -128,15 +127,16 @@ async fn main2() -> Result<(), Box<dyn Error>> {
                             "Message received: {:?}",
                             String::from_utf8(msg.payload.to_vec())
                         );
-    handle_request(msg, thread_bucket, thread_db).await;
-                }
-                Err(err) => {
-                    error!("Error receiving message: {err}");
+
+                        handle_request(msg, thread_bucket, thread_db).await;
+                    }
+                    Err(err) => {
+                        error!("Error receiving message: {err}");
+                    }
                 }
             }
-        }
-    })
-    .await;
+        })
+        .await;
     Ok(())
 }
 
