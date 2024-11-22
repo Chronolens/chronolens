@@ -80,11 +80,11 @@ impl DbManager {
         let media_to_insert = media::ActiveModel {
             id: Set(media_id),
             user_id: Set(user_id),
-            preview_id: Set(None),
             hash: Set(checksum),
             created_at: Set(timestamp),
             last_modified_at: Set(Utc::now().timestamp_millis()),
             deleted: Set(false),
+            ..Default::default()
         };
 
         media::Entity::insert(media_to_insert)
@@ -421,7 +421,7 @@ impl DbManager {
         cluster_id: i32,
         page: u64,
         page_size: u64,
-    ) -> Result<Vec<(String, String)>, GetPreviewError> {
+    ) -> Result<Vec<(String, Option<String>)>, GetPreviewError> {
         let offset = (page - 1) * page_size;
 
         match media_face::Entity::find()
@@ -435,7 +435,7 @@ impl DbManager {
             .column_as(media::Column::PreviewId, "preview_id")
             .offset(offset)
             .limit(page_size)
-            .into_tuple::<(String, String)>()
+            .into_tuple::<(String, Option<String>)>()
             .all(&self.connection)
             .await
         {
@@ -450,7 +450,7 @@ impl DbManager {
         face_id: i32,
         page: u64,
         page_size: u64,
-    ) -> Result<Vec<(String, String)>, GetPreviewError> {
+    ) -> Result<Vec<(String, Option<String>)>, GetPreviewError> {
         let offset = (page - 1) * page_size;
 
         match media_face::Entity::find()
@@ -465,7 +465,7 @@ impl DbManager {
             .column_as(media::Column::PreviewId, "preview_id")
             .offset(offset)
             .limit(page_size)
-            .into_tuple::<(String, String)>()
+            .into_tuple::<(String, Option<String>)>()
             .all(&self.connection)
             .await
         {

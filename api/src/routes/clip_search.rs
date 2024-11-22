@@ -1,12 +1,15 @@
+use crate::{
+    models::api_models::{PreviewItem, SearchQuery},
+    ServerConfig,
+};
+use async_nats::Client;
 use axum::{
-    extract::{Query, State, Extension},
+    extract::{Extension, Query, State},
     response::{IntoResponse, Response},
     Json,
 };
 use http::StatusCode;
 use serde_json::json;
-use crate::{ServerConfig, models::api_models::{PreviewItem, SearchQuery}};
-use async_nats::Client;
 
 pub async fn clip_search(
     State(server_config): State<ServerConfig>,
@@ -33,10 +36,13 @@ pub async fn clip_search(
 
     let nats_client: &Client = &server_config.nats_client;
 
-    let subject = "clip-process-search"; 
-    let response = match nats_client.request(subject, request_message.to_string().into()).await {
+    let subject = "clip-process-search";
+    let response = match nats_client
+        .request(subject, request_message.to_string().into())
+        .await
+    {
         Ok(response) => response,
-        Err(e) => {
+        Err(_) => {
             // eprintln!("Failed to send request to NATS: {}", e);
             return (StatusCode::INTERNAL_SERVER_ERROR, "Error sending request").into_response();
         }
@@ -44,7 +50,7 @@ pub async fn clip_search(
 
     let response_data = match String::from_utf8(response.payload.to_vec()) {
         Ok(data) => data,
-        Err(e) => {
+        Err(_) => {
             // eprintln!("Failed to parse NATS response: {}", e);
             return (StatusCode::INTERNAL_SERVER_ERROR, "Error parsing response").into_response();
         }
@@ -53,13 +59,14 @@ pub async fn clip_search(
     let preview_items: Result<Vec<PreviewItem>, _> = serde_json::from_str(&response_data);
 
     match preview_items {
-        Ok(items) => {
-            Json(json!(items)).into_response() 
-        }
-        Err(e) => {
+        Ok(items) => Json(json!(items)).into_response(),
+        Err(_) => {
             // eprintln!("Failed to deserialize response data: {}", e);
-            (StatusCode::INTERNAL_SERVER_ERROR, "Error deserializing response").into_response()
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Error deserializing response",
+            )
+                .into_response()
         }
     }
-
 }
