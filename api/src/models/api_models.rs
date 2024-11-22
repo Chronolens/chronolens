@@ -87,7 +87,6 @@ pub struct PreviewItem {
     pub preview_url: String,
 }
 
-
 #[derive(Serialize)]
 pub struct MediaMetadataResponse {
     pub id: String,

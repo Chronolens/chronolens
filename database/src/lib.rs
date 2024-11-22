@@ -241,7 +241,7 @@ impl DbManager {
         user_id: String,
         page: u64,
         page_size: u64,
-    ) -> Result<Vec<(String, String)>, GetPreviewError> {
+    ) -> Result<Vec<(String, Option<String>)>, GetPreviewError> {
         let offset = (page - 1) * page_size;
 
         match media::Entity::find()
@@ -253,7 +253,7 @@ impl DbManager {
             .filter(media::Column::Deleted.eq(false))
             .offset(offset)
             .limit(page_size)
-            .into_tuple::<(String, String)>()
+            .into_tuple::<(String, Option<String>)>()
             .all(&self.connection)
             .await
         {

@@ -6,8 +6,10 @@ use axum::{
 use database::GetPreviewError;
 use http::StatusCode;
 
-use crate::{models::api_models::{PreviewItem, Pagination} , ServerConfig};
-
+use crate::{
+    models::api_models::{Pagination, PreviewItem},
+    ServerConfig,
+};
 
 pub async fn previews(
     State(server_config): State<ServerConfig>,
@@ -27,12 +29,19 @@ pub async fn previews(
                 preview_ids.into_iter().map(|(media_id, preview_id)| {
                     let bucket = server_config.bucket.clone();
                     async move {
-                        match bucket.presign_get(preview_id, 86400, None).await {
-                            Ok(url) => Some(PreviewItem {
+                        if let Some(p_id) = preview_id {
+                            match bucket.presign_get(p_id, 86400, None).await {
+                                Ok(url) => Some(PreviewItem {
+                                    id: media_id,
+                                    preview_url: url,
+                                }),
+                                Err(_) => None,
+                            }
+                        } else {
+                            Some(PreviewItem {
                                 id: media_id,
-                                preview_url: url,
-                            }),
-                            Err(_) => None,
+                                preview_url: "".to_string(),
+                            })
                         }
                     }
                 }),

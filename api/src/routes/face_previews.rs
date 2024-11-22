@@ -6,9 +6,7 @@ use axum::{
 use database::GetPreviewError;
 use http::StatusCode;
 
-use crate::{models::api_models::PreviewItem, models::api_models::Pagination, ServerConfig};
-
-
+use crate::{models::api_models::Pagination, models::api_models::PreviewItem, ServerConfig};
 
 pub async fn face_previews(
     State(server_config): State<ServerConfig>,
