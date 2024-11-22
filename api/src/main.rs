@@ -15,9 +15,9 @@ use http::StatusCode;
 use jsonwebtoken::{decode, DecodingKey, Validation};
 use models::api_models::AccessTokenClaims;
 use routes::{
-    cluster_previews::cluster_previews, face_previews::face_previews, faces::faces, login::login,
-    logs::logs, media::media, preview::preview, previews::previews, refresh::refresh,
-    sync_full::sync_full, sync_partial::sync_partial, upload_image::upload_image,
+    clip_search::clip_search, cluster_previews::cluster_previews, face_previews::face_previews,
+    faces::faces, login::login, logs::logs, media::media, preview::preview, previews::previews,
+    refresh::refresh, sync_full::sync_full, sync_partial::sync_partial, upload_image::upload_image,
 };
 use s3::{creds::Credentials, error::S3Error, Bucket, BucketConfiguration, Region};
 use serde::Deserialize;
@@ -28,6 +28,7 @@ pub struct ServerConfig {
     pub secret: String,
     pub bucket: Box<Bucket>,
     pub nats_jetstream: async_nats::jetstream::Context,
+    pub nats_client: async_nats::Client,
 }
 
 #[derive(Deserialize, Debug)]
@@ -85,21 +86,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Err(err) => panic!("{}", err),
     };
 
-    let client = match async_nats::connect(environment_variables.nats_endpoint).await {
+    let nats_client = match async_nats::connect(environment_variables.nats_endpoint.clone()).await {
         Ok(c) => c,
         Err(err) => {
-            panic!("Couldn't connect nats client: {err}");
+            panic!("Couldn't connect to NATS client: {err}");
         }
     };
-    let nats_jetstream = async_nats::jetstream::new(client);
+
+    let nats_jetstream = async_nats::jetstream::new(nats_client.clone());
 
     let server_config = ServerConfig {
         database,
         secret,
         bucket,
         nats_jetstream,
+        nats_client,
     };
-    // build our application with a route
+
     let public_routes = Router::new()
         .route("/login", post(login))
         .route("/refresh", post(refresh));
@@ -118,6 +121,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/faces", get(faces))
         .route("/cluster/:cluster_id", get(cluster_previews))
         .route("/face/:face_id", get(face_previews))
+        .route("/search", get(clip_search))
         .layer(middleware::from_fn_with_state(
             server_config.secret.clone(),
             auth_middleware,

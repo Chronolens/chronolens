@@ -181,7 +181,7 @@ pub async fn upload_image(
                     // Step 5: publish ml embeddings generation request
                     let _ = match server_config
                         .nats_jetstream
-                        .publish("machine-learning", file_uuid_bytes)
+                        .publish("image-process", file_uuid_bytes)
                         .await
                     {
                         Ok(publish_ack) => publish_ack,

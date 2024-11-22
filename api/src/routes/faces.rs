@@ -22,7 +22,7 @@ pub async fn faces(
             let face_futures: Vec<_> = faces
                 .into_iter()
                 .map(|face| async move {
-                    let photo_link = sc1
+                    let photo_url = sc1
                         .bucket
                         .presign_get(&face.photo_id, 86400, None)
                         .await
@@ -30,7 +30,7 @@ pub async fn faces(
                     FaceResponse {
                         face_id: face.face_id,
                         name: face.name,
-                        photo_link: photo_link.to_string(),
+                        photo_url: photo_url.to_string(),
                         bbox: face.bbox,
                     }
                 })
@@ -39,14 +39,14 @@ pub async fn faces(
             let cluster_futures: Vec<_> = clusters
                 .into_iter()
                 .map(|cluster| async move {
-                    let photo_link = sc2
+                    let photo_url = sc2
                         .bucket
                         .presign_get(&cluster.photo_id, 86400, None)
                         .await
                         .unwrap();
                     ClusterResponse {
                         cluster_id: cluster.cluster_id,
-                        photo_link: photo_link.to_string(),
+                        photo_url: photo_url.to_string(),
                         bbox: cluster.bbox,
                     }
                 })
