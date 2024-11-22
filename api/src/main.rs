@@ -15,9 +15,9 @@ use http::StatusCode;
 use jsonwebtoken::{decode, DecodingKey, Validation};
 use models::api_models::AccessTokenClaims;
 use routes::{
-    clip_search::clip_search, cluster_previews::cluster_previews, face_previews::face_previews, faces::faces, login::login, logs::logs, media::media,
-    preview::preview, previews::previews, refresh::refresh, sync_full::sync_full,
-    sync_partial::sync_partial, upload_image::upload_image,
+    clip_search::clip_search, cluster_previews::cluster_previews, face_previews::face_previews,
+    faces::faces, login::login, logs::logs, media::media, preview::preview, previews::previews,
+    refresh::refresh, sync_full::sync_full, sync_partial::sync_partial, upload_image::upload_image,
 };
 use s3::{creds::Credentials, error::S3Error, Bucket, BucketConfiguration, Region};
 use serde::Deserialize;
@@ -92,7 +92,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             panic!("Couldn't connect to NATS client: {err}");
         }
     };
-    
+
     let nats_jetstream = async_nats::jetstream::new(nats_client.clone());
 
     let server_config = ServerConfig {
@@ -100,9 +100,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         secret,
         bucket,
         nats_jetstream,
-        nats_client, 
+        nats_client,
     };
-    
 
     let public_routes = Router::new()
         .route("/login", post(login))
