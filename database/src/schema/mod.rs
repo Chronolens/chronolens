@@ -2,7 +2,9 @@
 
 pub mod prelude;
 
-pub mod media;
-pub mod user;
+pub mod cluster;
+pub mod face;
 pub mod log;
-pub mod face_data;
+pub mod media;
+pub mod media_face;
+pub mod user;

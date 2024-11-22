@@ -10,19 +10,17 @@ impl MigrationTrait for Migration {
         manager
             .create_table(
                 Table::create()
-                    .table(FaceData::Table)
+                    .table(Face::Table)
                     .if_not_exists()
-                    .col(integer_uniq(FaceData::Id).primary_key().auto_increment())
-                    .col(string(FaceData::MediaId))
+                    .col(integer(Face::Id).primary_key().auto_increment())
+                    .col(string(Face::Name))
+                    .col(string_null(Face::FeaturedPhotoId))
                     .foreign_key(
                         ForeignKey::create()
-                            .name("user_id")
-                            .from(FaceData::Table, FaceData::MediaId)
+                            .name("featured_photo_id")
+                            .from(Face::Table, Face::FeaturedPhotoId)
                             .to(Media::Table, Media::Id),
                     )
-                    .col(ColumnDef::new_with_type(FaceData::Embedding,ColumnType::Vector(Some(512))).not_null())
-                    .col(ColumnDef::new_with_type(FaceData::Coordinates,ColumnType::Vector(Some(2))).not_null())
-                    .col(integer_null(FaceData::ClusterId))
                     .to_owned(),
             )
             .await
@@ -30,17 +28,15 @@ impl MigrationTrait for Migration {
 
     async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
         manager
-            .drop_table(Table::drop().table(FaceData::Table).to_owned())
+            .drop_table(Table::drop().table(Face::Table).to_owned())
             .await
     }
 }
 
 #[derive(DeriveIden)]
-enum FaceData {
+pub enum Face {
     Table,
     Id,
-    MediaId,
-    Embedding,
-    Coordinates,
-    ClusterId
+    Name,
+    FeaturedPhotoId,
 }

@@ -12,7 +12,7 @@ use image::{
 use s3::Bucket;
 
 // FIX: change this to the http crate
-const CONTENT_TYPE_HEADER: &str = "Content-Type";
+const CONTENT_TYPE_HEADER: &str = "content-type";
 const PREVIEW_ID_PREFIX: &str = "prev/";
 const IOS_MEDIA_TYPES: [&str; 2] = ["image/heif", "image/heic"];
 
@@ -103,7 +103,7 @@ pub async fn handle_request(msg: Message, bucket: Box<Bucket>, db: DbManager) {
                 return;
             }
         };
-        let orientation = match decoder.orientation(){
+        let orientation = match decoder.orientation() {
             Ok(orientation) => orientation,
             Err(err) => {
                 error!("Could not get image orientation: {err}");
@@ -127,15 +127,22 @@ pub async fn handle_request(msg: Message, bucket: Box<Bucket>, db: DbManager) {
 
     // Convert image to bytes in jpg format
     let mut preview_bytes: Vec<u8> = Vec::new();
-    let _ = preview.write_to(
-        &mut Cursor::new(&mut preview_bytes),
-        image::ImageFormat::Jpeg,
-    );
+    let mut preview_content_type = "image/jpeg";
+    let mut preview_format = image::ImageFormat::Jpeg;
+    if preview.color().has_alpha() {
+        let _ = preview.write_to(
+            &mut Cursor::new(&mut preview_bytes),
+            image::ImageFormat::Png,
+        );
+        preview_content_type = "image/png";
+        preview_format = image::ImageFormat::Png;
+    }
+    let _ = preview.write_to(&mut Cursor::new(&mut preview_bytes), preview_format);
 
     let mut preview_id = source_image_id.clone();
     preview_id.insert_str(0, PREVIEW_ID_PREFIX);
     let preview_response_data = match bucket
-        .put_object_with_content_type(&preview_id, &preview_bytes, "image/jpeg")
+        .put_object_with_content_type(&preview_id, &preview_bytes, preview_content_type)
         .await
     {
         Ok(rp) => rp,

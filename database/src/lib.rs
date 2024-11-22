@@ -2,14 +2,16 @@ pub mod schema;
 
 use migration::{Migrator, MigratorTrait};
 use schema::{
+    cluster, face, log,
     media::{self, ActiveModel},
-    user,
+    media_face, user,
 };
 use sea_orm::{
     entity::*, query::*, sqlx::types::chrono::Utc, ColumnTrait, ConnectOptions, Database,
     DatabaseConnection, DbErr, EntityTrait, FromQueryResult, QueryFilter,
 };
 use serde::{Deserialize, Serialize};
+use std::string::ToString;
 
 #[derive(Deserialize, Debug)]
 struct DbEnvs {
@@ -89,6 +91,11 @@ impl DbManager {
             .exec(&self.connection)
             .await
     }
+    pub async fn get_media(&self, media_id: String) -> Result<Option<media::Model>, DbErr> {
+        media::Entity::find_by_id(&media_id)
+            .one(&self.connection)
+            .await
+    }
 
     async fn _delete_media(&self, media_id: i32, user_id: i32) -> Result<(), &'static str> {
         // Find the photo to be deleted
@@ -114,17 +121,15 @@ impl DbManager {
         }
     }
 
-    pub async fn get_user(&self, username: String) -> Result<user::Model, &str> {
+    pub async fn get_user(&self, username: String) -> Result<user::Model, GetUserError> {
         match user::Entity::find()
             .filter(user::Column::Username.eq(username))
             .one(&self.connection)
             .await
         {
-            Ok(user) => Ok(user.expect("Username not found")),
-            Err(err) => {
-                println!("Err: {}", err);
-                Err("Failed to get user")
-            }
+            Ok(Some(user)) => Ok(user),
+            Ok(None) => Err(GetUserError::NotFound),
+            Err(..) => Err(GetUserError::InternalError),
         }
     }
     pub async fn update_media_preview(
@@ -230,6 +235,33 @@ impl DbManager {
             Err(_) => Err("Failed to get media"),
         }
     }
+
+    pub async fn get_previews(
+        &self,
+        user_id: String,
+        page: u64,
+        page_size: u64,
+    ) -> Result<Vec<(String, Option<String>)>, GetPreviewError> {
+        let offset = (page - 1) * page_size;
+
+        match media::Entity::find()
+            .order_by_desc(media::Column::CreatedAt)
+            .select_only()
+            .select_column(media::Column::Id)
+            .select_column(media::Column::PreviewId)
+            .filter(media::Column::UserId.eq(user_id))
+            .filter(media::Column::Deleted.eq(false))
+            .offset(offset)
+            .limit(page_size)
+            .into_tuple::<(String, Option<String>)>()
+            .all(&self.connection)
+            .await
+        {
+            Ok(result) => Ok(result),
+            Err(_) => Err(GetPreviewError::InternalError),
+        }
+    }
+
     pub async fn get_preview_from_user(
         &self,
         user_id: String,
@@ -250,11 +282,241 @@ impl DbManager {
             Err(_) => Err(GetPreviewError::InternalError),
         }
     }
+
+    pub async fn get_logs(
+        &self,
+        user_id: String,
+        page: u64,
+        page_size: u64,
+    ) -> Result<Vec<LogEntry>, GetLogError> {
+        let offset = (page - 1) * page_size;
+
+        match log::Entity::find()
+            .order_by_desc(log::Column::Date)
+            .filter(log::Column::UserId.eq(user_id))
+            .offset(offset)
+            .limit(page_size)
+            .all(&self.connection)
+            .await
+        {
+            Ok(log_models) => {
+                let log_entries = log_models
+                    .into_iter()
+                    .map(|model| LogEntry {
+                        id: model.id,
+                        level: model.level,
+                        date: model.date,
+                        message: model.message,
+                    })
+                    .collect();
+                Ok(log_entries)
+            }
+            Err(_) => Err(GetLogError::InternalError),
+        }
+    }
+
+    pub async fn add_log(
+        &self,
+        user_id: String,
+        level: LogLevel,
+        date: i64,
+        message: String,
+    ) -> Result<(), AddLogError> {
+        let new_log = log::ActiveModel {
+            user_id: Set(user_id),
+            level: Set(level.to_string()),
+            date: Set(date),
+            message: Set(message),
+            ..Default::default()
+        };
+
+        match new_log.insert(&self.connection).await {
+            Ok(_) => Ok(()),
+            Err(_) => Err(AddLogError::InternalError),
+        }
+    }
+
+    pub async fn get_faces(&self, user_id: String) -> Result<(Vec<Face>, Vec<Cluster>), DbErr> {
+        // Query 1: Get all clusters *without* faces
+        let clusters_without_faces: Vec<(cluster::Model, Option<face::Model>)> =
+            cluster::Entity::find()
+                .filter(cluster::Column::UserId.eq(user_id.clone()))
+                .filter(face::Column::Id.is_null())
+                .find_also_related(face::Entity)
+                .all(&self.connection)
+                .await?;
+
+        // Query 2: Get distinct clusters *with* faces based on FaceId
+        let clusters_with_faces: Vec<(cluster::Model, Option<face::Model>)> =
+            cluster::Entity::find()
+                .filter(cluster::Column::UserId.eq(user_id.clone()))
+                .filter(face::Column::Id.is_not_null())
+                .find_also_related(face::Entity)
+                .distinct_on([cluster::Column::FaceId])
+                .all(&self.connection)
+                .await?;
+
+        // Combine results
+        let faces_with_clusters: Vec<(cluster::Model, Option<face::Model>)> =
+            clusters_without_faces
+                .into_iter()
+                .chain(clusters_with_faces.into_iter())
+                .collect();
+
+        let mut faces: Vec<Face> = vec![];
+        let mut clusters: Vec<Cluster> = vec![];
+        for (cluster, face_opt) in faces_with_clusters {
+            if let Some(face) = face_opt {
+                let (photo_id, bbox) = if let Some(featured_photo_id) = &face.featured_photo_id {
+                    media_face::Entity::find()
+                        .select_only()
+                        .select_column(media_face::Column::MediaId)
+                        .select_column(media_face::Column::FaceBoundingBox)
+                        .filter(media_face::Column::MediaId.eq(featured_photo_id.clone()))
+                        .into_tuple()
+                        .one(&self.connection)
+                        .await?
+                        .unwrap()
+                } else {
+                    media_face::Entity::find()
+                        .select_only()
+                        .select_column(media_face::Column::MediaId)
+                        .select_column(media_face::Column::FaceBoundingBox)
+                        .filter(media_face::Column::ClusterId.eq(cluster.id))
+                        .into_tuple()
+                        .one(&self.connection)
+                        .await?
+                        .unwrap()
+                };
+
+                faces.push(Face {
+                    face_id: face.id,
+                    name: face.name.clone(),
+                    photo_id,
+                    bbox,
+                });
+            } else {
+                let (photo_id, bbox) = media_face::Entity::find()
+                    .select_only()
+                    .select_column(media_face::Column::MediaId)
+                    .select_column(media_face::Column::FaceBoundingBox)
+                    .filter(media_face::Column::ClusterId.eq(cluster.id))
+                    .into_tuple()
+                    .one(&self.connection)
+                    .await?
+                    .unwrap();
+                clusters.push(Cluster {
+                    cluster_id: cluster.id,
+                    photo_id,
+                    bbox,
+                });
+            }
+        }
+        Ok((faces, clusters))
+    }
+
+    pub async fn get_cluster_previews(
+        &self,
+        user_id: String,
+        cluster_id: i32,
+        page: u64,
+        page_size: u64,
+    ) -> Result<Vec<(String, String)>, GetPreviewError> {
+        let offset = (page - 1) * page_size;
+
+        match media_face::Entity::find()
+            .filter(media_face::Column::ClusterId.eq(cluster_id))
+            .join(JoinType::LeftJoin, media_face::Relation::Media.def())
+            .filter(media::Column::UserId.eq(user_id))
+            .order_by_desc(media::Column::CreatedAt)
+            .select_only()
+            .column_as(media::Column::Id, "media_id")
+            .column_as(media::Column::PreviewId, "preview_id")
+            .offset(offset)
+            .limit(page_size)
+            .into_tuple::<(String, String)>()
+            .all(&self.connection)
+            .await
+        {
+            Ok(results) => Ok(results),
+            Err(_) => Err(GetPreviewError::InternalError),
+        }
+    }
+
+    pub async fn get_face_previews(
+        &self,
+        user_id: String,
+        face_id: i32,
+        page: u64,
+        page_size: u64,
+    ) -> Result<Vec<(String, String)>, GetPreviewError> {
+        let offset = (page - 1) * page_size;
+
+        match media_face::Entity::find()
+            // Join media_face with cluster on cluster_id
+            .join(JoinType::InnerJoin, media_face::Relation::Cluster.def())
+            // Filter clusters that have the specified face_id
+            .filter(cluster::Column::FaceId.eq(face_id))
+            // Join media_face with media on media_id (Left join to include all media_face rows)
+            .join(JoinType::LeftJoin, media_face::Relation::Media.def())
+            // Filter by the provided user_id
+            .filter(media::Column::UserId.eq(user_id))
+            // Order by media created_at in descending order
+            .order_by_desc(media::Column::CreatedAt)
+            // Select only media_id and preview_id
+            .select_only()
+            .column_as(media::Column::Id, "media_id")
+            .column_as(media::Column::PreviewId, "preview_id")
+            // Apply pagination with offset and limit
+            .offset(offset)
+            .limit(page_size)
+            .into_tuple::<(String, String)>()
+            .all(&self.connection)
+            .await
+        {
+            Ok(results) => Ok(results),
+            Err(_) => Err(GetPreviewError::InternalError),
+        }
+    }
 }
 
 pub enum GetPreviewError {
     NotFound,
-    InternalError
+    InternalError,
+}
+
+pub enum GetLogError {
+    InternalError,
+    NotFound,
+}
+
+pub enum AddLogError {
+    InternalError,
+}
+
+pub enum GetUserError {
+    NotFound,
+    InternalError,
+}
+
+#[derive(strum_macros::Display, Debug)]
+pub enum LogLevel {
+    Info,
+    Error,
+}
+
+#[derive(Serialize)]
+pub struct LogEntry {
+    pub id: i32,
+    pub level: String,
+    pub date: i64,
+    pub message: String,
+}
+
+#[derive(Serialize)]
+#[serde(transparent)]
+pub struct LogResponse {
+    pub logs: Vec<LogEntry>,
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone, FromQueryResult)]
@@ -268,4 +530,19 @@ pub struct RemoteMediaAdded {
 #[serde(transparent)]
 pub struct RemoteMediaDeleted {
     pub id: String,
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone, FromQueryResult)]
+pub struct Face {
+    pub face_id: i32,
+    pub name: String,
+    pub photo_id: String,
+    pub bbox: Vec<i32>,
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone, FromQueryResult)]
+pub struct Cluster {
+    pub cluster_id: i32,
+    pub photo_id: String,
+    pub bbox: Vec<i32>,
 }

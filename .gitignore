@@ -32,3 +32,5 @@ Cargo.lock
 #/target
 
 .env
+.session.vim
+.secrets

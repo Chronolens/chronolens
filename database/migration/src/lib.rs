@@ -3,8 +3,10 @@ pub use sea_orm_migration::prelude::*;
 mod m001_setup;
 mod m002_user;
 mod m003_media;
-mod m004_face_data;
-mod m005_log;
+mod m004_face;
+mod m005_cluster;
+mod m006_media_face;
+mod m007_log;
 
 pub struct Migrator;
 
@@ -15,8 +17,10 @@ impl MigratorTrait for Migrator {
             Box::new(m001_setup::Migration),
             Box::new(m002_user::Migration),
             Box::new(m003_media::Migration),
-            Box::new(m004_face_data::Migration),
-            Box::new(m005_log::Migration),
+            Box::new(m004_face::Migration),
+            Box::new(m005_cluster::Migration),
+            Box::new(m006_media_face::Migration),
+            Box::new(m007_log::Migration),
         ]
     }
 }

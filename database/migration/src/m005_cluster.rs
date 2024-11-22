@@ -1,6 +1,5 @@
+use crate::{m002_user::User, m004_face::Face};
 use sea_orm_migration::{prelude::*, schema::*};
-
-use crate::m002_user::User;
 
 #[derive(DeriveMigrationName)]
 pub struct Migration;
@@ -11,19 +10,23 @@ impl MigrationTrait for Migration {
         manager
             .create_table(
                 Table::create()
-                    .table(Log::Table)
+                    .table(Cluster::Table)
                     .if_not_exists()
-                    .col(integer_uniq(Log::Id).primary_key().auto_increment())
-                    .col(string(Log::UserId))
+                    .col(integer(Cluster::Id).primary_key().auto_increment())
+                    .col(string(Cluster::UserId))
                     .foreign_key(
                         ForeignKey::create()
                             .name("user_id")
-                            .from(Log::Table, Log::UserId)
+                            .from(Cluster::Table, Cluster::UserId)
                             .to(User::Table, User::Id),
                     )
-                    .col(string(Log::Severity))
-                    .col(date_time(Log::Date))
-                    .col(string(Log::Message))
+                    .col(integer_null(Cluster::FaceId))
+                    .foreign_key(
+                        ForeignKey::create()
+                            .name("face_id")
+                            .from(Cluster::Table, Cluster::FaceId)
+                            .to(Face::Table, Face::Id),
+                    )
                     .to_owned(),
             )
             .await
@@ -31,17 +34,15 @@ impl MigrationTrait for Migration {
 
     async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
         manager
-            .drop_table(Table::drop().table(Log::Table).to_owned())
+            .drop_table(Table::drop().table(Cluster::Table).to_owned())
             .await
     }
 }
 
 #[derive(DeriveIden)]
-enum Log {
+pub enum Cluster {
     Table,
     Id,
     UserId,
-    Severity,
-    Date,
-    Message,
+    FaceId,
 }

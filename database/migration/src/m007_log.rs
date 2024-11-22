@@ -1,5 +1,6 @@
-use crate::m002_user::User;
 use sea_orm_migration::{prelude::*, schema::*};
+
+use crate::m002_user::User;
 
 #[derive(DeriveMigrationName)]
 pub struct Migration;
@@ -10,21 +11,19 @@ impl MigrationTrait for Migration {
         manager
             .create_table(
                 Table::create()
-                    .table(Media::Table)
+                    .table(Log::Table)
                     .if_not_exists()
-                    .col(string(Media::Id).primary_key())
-                    .col(string(Media::UserId))
+                    .col(integer(Log::Id).primary_key().auto_increment())
+                    .col(string(Log::UserId))
                     .foreign_key(
                         ForeignKey::create()
                             .name("user_id")
-                            .from(Media::Table, Media::UserId)
+                            .from(Log::Table, Log::UserId)
                             .to(User::Table, User::Id),
                     )
-                    .col(string_null(Media::PreviewId))
-                    .col(string(Media::Hash))
-                    .col(big_integer(Media::CreatedAt))
-                    .col(big_integer(Media::LastModifiedAt))
-                    .col(boolean(Media::Deleted))
+                    .col(string(Log::Level))
+                    .col(big_integer(Log::Date))
+                    .col(string(Log::Message))
                     .to_owned(),
             )
             .await
@@ -32,19 +31,17 @@ impl MigrationTrait for Migration {
 
     async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
         manager
-            .drop_table(Table::drop().table(Media::Table).to_owned())
+            .drop_table(Table::drop().table(Log::Table).to_owned())
             .await
     }
 }
 
 #[derive(DeriveIden)]
-pub enum Media {
+enum Log {
     Table,
     Id,
     UserId,
-    PreviewId,
-    Hash,
-    CreatedAt,
-    LastModifiedAt,
-    Deleted,
+    Level,
+    Date,
+    Message,
 }

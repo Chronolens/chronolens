@@ -1,14 +1,16 @@
+use std::collections::HashMap;
+
 use database::{RemoteMediaAdded, RemoteMediaDeleted};
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize,Deserialize)]
+#[derive(Serialize, Deserialize)]
 pub struct AccessTokenClaims {
     pub iat: i64,
     pub exp: i64,
     pub user_id: String,
 }
 
-#[derive(Serialize,Deserialize)]
+#[derive(Serialize, Deserialize)]
 pub struct RefreshTokenClaims {
     pub iat: i64,
     pub exp: i64,
@@ -37,5 +39,57 @@ pub struct TokenResponse {
 #[derive(Serialize)]
 pub struct PartialSyncResponse {
     pub uploaded: Vec<RemoteMediaAdded>,
-    pub deleted: Vec<RemoteMediaDeleted>
+    pub deleted: Vec<RemoteMediaDeleted>,
+}
+
+#[derive(Serialize)]
+#[serde(transparent)]
+pub struct PreviewResponse {
+    pub previews: HashMap<String, String>,
+}
+
+#[derive(Serialize)]
+#[serde(transparent)]
+pub struct ClusterPreviewResponse {
+    pub previews: Vec<HashMap<String, String>>,
+}
+
+#[derive(Serialize)]
+pub struct GetFacesResponse {
+    pub faces: Vec<FaceResponse>,
+    pub clusters: Vec<ClusterResponse>,
+}
+
+#[derive(Serialize)]
+pub struct FaceResponse {
+    pub face_id: i32,
+    pub name: String,
+    pub photo_link: String,
+    pub bbox: Vec<i32>,
+}
+
+#[derive(Serialize)]
+pub struct ClusterResponse {
+    pub cluster_id: i32,
+    pub photo_link: String,
+    pub bbox: Vec<i32>,
+}
+
+#[derive(Deserialize)]
+pub struct Pagination {
+    pub page: Option<u64>,
+    pub page_size: Option<u64>,
+}
+
+#[derive(Serialize, Debug, Clone)]
+pub struct PreviewItem {
+    pub id: String,
+    pub preview_url: String,
+}
+
+#[derive(Serialize)]
+pub struct MediaMetadataResponse {
+    pub id: String,
+    pub media_url: String,
+    pub created_at: i64,
 }
