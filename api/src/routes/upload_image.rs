@@ -97,7 +97,7 @@ pub async fn upload_image(
             match field.chunk().await {
                 // Case when there's a new chunk of data
                 Ok(Some(data)) => {
-                    file_size += (data.len() as i64);
+                    file_size += data.len() as i64;
                     if chunk_builder.len() >= (5 * 1024 * 1024) {
                         let Ok(upload_response) = server_config
                             .bucket

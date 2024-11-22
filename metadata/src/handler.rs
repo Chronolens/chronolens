@@ -126,15 +126,23 @@ fn extract_image_length(exifdata: &Exif) -> Option<i32> {
 }
 
 fn extract_make(exifdata: &Exif) -> Option<String> {
-    exifdata
-        .get_field(Tag::Make, In::PRIMARY)
-        .map(|field| field.value.display_as(field.tag).to_string())
+    exifdata.get_field(Tag::Make, In::PRIMARY).map(|field| {
+        field
+            .value
+            .display_as(field.tag)
+            .to_string()
+            .replace("\"", "")
+    })
 }
 
 fn extract_model(exifdata: &Exif) -> Option<String> {
-    exifdata
-        .get_field(Tag::Model, In::PRIMARY)
-        .map(|field| field.value.display_as(field.tag).to_string())
+    exifdata.get_field(Tag::Model, In::PRIMARY).map(|field| {
+        field
+            .value
+            .display_as(field.tag)
+            .to_string()
+            .replace("\"", "")
+    })
 }
 
 fn extract_fnumber(exifdata: &Exif) -> Option<String> {

@@ -1,12 +1,11 @@
 mod handler;
 use database::DbManager;
-use exif::{Reader, Tag};
 use futures_util::StreamExt;
 use handler::handle_request;
 use log::{error, info};
 use s3::{creds::Credentials, error::S3Error, Bucket, BucketConfiguration, Region};
 use serde::Deserialize;
-use std::{error::Error, io::Cursor};
+use std::error::Error;
 
 #[derive(Deserialize, Debug)]
 pub struct EnvVars {
@@ -32,43 +31,6 @@ fn nats_endpoint_default() -> String {
 fn object_storage_endpoint_default() -> String {
     "http://localhost".to_string()
 }
-
-// #[tokio::main]
-// async fn main() -> Result<(), Box<dyn Error>>  {
-//     dotenvy::dotenv().ok();
-//     let envs = match envy::from_env::<EnvVars>() {
-//         Ok(vars) => vars,
-//         Err(err) => panic!("{}", err),
-//     };
-//     let bucket = match setup_bucket(&envs).await{
-//         Ok(bucket) => bucket,
-//         Err(err) => panic!("Error setting up bucket {err}")
-//     };
-
-//     //4dae35d7-7674-44a4-91e4-94b32dbad5f5
-//     //f3cb8435-a086-42ae-8410-db0f60881c63
-//     //7ee52a0f-9f3c-42ec-937d-822b1b78cc39
-//     let source_media_id = "4d7ec44a-c0f9-4310-bb74-6126c3e76c89";
-//     let source_media_response = match bucket.get_object(source_media_id).await {
-//         Ok(oir) => oir,
-//         Err(err) => {
-//             panic!("Get object failed: {err}");
-//         }
-//     };
-
-//     let source_media_bytes = source_media_response.bytes();
-//     let image_size = source_media_bytes.len();
-//     let mut bufreader = Cursor::new(source_media_bytes);
-//     let exifreader = Reader::new();
-//     match exifreader.read_from_container(&mut bufreader) {
-//         Ok(exifdata) => {
-
-//             extract_metadata(&exifdata);
-//         }
-//         Err(err) => panic!("Error reading exif: {err}"),
-//     };
-//     Ok(())
-// }
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
