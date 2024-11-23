@@ -96,11 +96,40 @@ impl DbManager {
             .await
     }
 
+  
     pub async fn get_media(&self, media_id: String) -> Result<Option<media::Model>, DbErr> {
-        media::Entity::find_by_id(&media_id)
+        match media::Entity::find_by_id(&media_id)
+            .select_only()
+            .columns([
+                media::Column::Id,
+                media::Column::UserId,
+                media::Column::PreviewId,
+                media::Column::Hash,
+                media::Column::CreatedAt,
+                media::Column::LastModifiedAt,
+                media::Column::Deleted,
+                media::Column::FileSize,
+                media::Column::FileName,
+                media::Column::Longitude,
+                media::Column::Latitude,
+                media::Column::ImageWidth,
+                media::Column::ImageLength,
+                media::Column::Make,
+                media::Column::Model,
+                media::Column::Fnumber,
+                media::Column::ExposureTime,
+                media::Column::PhotographicSensitivity,
+                media::Column::Orientation,
+            ])
             .one(&self.connection)
             .await
+        {
+            Ok(result) => {Ok(result)}
+            Err(e) => {Err(e)}
+        }
     }
+    
+    
 
     async fn _delete_media(&self, media_id: i32, user_id: i32) -> Result<(), &'static str> {
         // Find the photo to be deleted
