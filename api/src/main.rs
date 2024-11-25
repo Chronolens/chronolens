@@ -18,6 +18,7 @@ use routes::{
     clip_search::clip_search, cluster_previews::cluster_previews, face_previews::face_previews,
     faces::faces, login::login, logs::logs, media::media, preview::preview, previews::previews,
     refresh::refresh, sync_full::sync_full, sync_partial::sync_partial, upload_image::upload_image,
+    create_face::create_face,
 };
 use s3::{creds::Credentials, error::S3Error, Bucket, BucketConfiguration, Region};
 use serde::Deserialize;
@@ -107,7 +108,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/login", post(login))
         .route("/refresh", post(refresh));
 
-    let private_routes = Router::new()
+        let private_routes = Router::new()
         .route(
             "/image/upload",
             post(upload_image).route_layer(DefaultBodyLimit::max(10737418240)),
@@ -122,6 +123,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/cluster/:cluster_id", get(cluster_previews))
         .route("/face/:face_id", get(face_previews))
         .route("/search", get(clip_search))
+        .route("/create_face", post(create_face)) 
         .layer(middleware::from_fn_with_state(
             server_config.secret.clone(),
             auth_middleware,
