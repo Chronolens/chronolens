@@ -112,3 +112,10 @@ pub struct SearchQuery {
     pub page: Option<u32>,
     pub page_size: Option<u32>,
 }
+
+
+#[derive(Deserialize)]
+pub struct CreateFacePayload {
+    pub ids: Vec<i32>,
+    pub name: String,
+}
