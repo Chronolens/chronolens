@@ -1,6 +1,6 @@
 FROM rust:1.82
 
-WORKDIR /usr/src/myapp
+WORKDIR /app
 COPY . .
 
 RUN cargo build --release --bin api
