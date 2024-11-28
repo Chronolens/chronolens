@@ -24,6 +24,12 @@ pub struct LoginRequest {
 }
 
 #[derive(Deserialize)]
+pub struct RegisterRequest {
+    pub username: String,
+    pub password: String,
+}
+
+#[derive(Deserialize)]
 pub struct RefreshTokenRequest {
     pub access_token: String,
     pub refresh_token: String,

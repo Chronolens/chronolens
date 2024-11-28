@@ -5,11 +5,12 @@ use axum::{
     response::{IntoResponse, Response},
     Extension,
 };
+use chrono::Utc;
 use http::HeaderMap;
 
 use crate::ServerConfig;
 
-const _ALLOWED_CONTENT_TYPES: [&str; 3] = ["image/png", "image/heic", "image/jpeg"];
+const ALLOWED_CONTENT_TYPES: [&str; 4] = ["image/png", "image/jpeg", "image/heic", "image/heif"];
 
 pub async fn upload_image(
     State(server_config): State<ServerConfig>,
@@ -22,12 +23,36 @@ pub async fn upload_image(
         .await
         .map_err(|_| StatusCode::BAD_REQUEST.into_response())
     {
-        let digest = field
-            .name()
-            .map(ToString::to_string)
-            .unwrap_or("name".to_owned());
+        let digest = match field.name().map(ToString::to_string) {
+            Some(digest) => digest,
+            None => {
+                let _ = server_config
+                    .database
+                    .add_log(
+                        user_id,
+                        database::LogLevel::Error,
+                        Utc::now().timestamp_millis(),
+                        "Media Upload: Could not convert the checksum into a string".to_string(),
+                    )
+                    .await;
+                return (
+                    StatusCode::BAD_REQUEST,
+                    "Could not convert the checksum into a string",
+                )
+                    .into_response();
+            }
+        };
 
         let Some(content_type) = field.content_type().map(ToString::to_string) else {
+            let _ = server_config
+                .database
+                .add_log(
+                    user_id,
+                    database::LogLevel::Error,
+                    Utc::now().timestamp_millis(),
+                    "Media Upload: Content type could not be decoded or does not exist".to_string(),
+                )
+                .await;
             return (
                 StatusCode::BAD_REQUEST,
                 "Content type could not be decoded or does not exist",
@@ -42,36 +67,67 @@ pub async fn upload_image(
         {
             Some(ts) => ts,
             None => {
+                let _ = server_config
+                    .database
+                    .add_log(
+                        user_id,
+                        database::LogLevel::Error,
+                        Utc::now().timestamp_millis(),
+                        "Media Upload: Timestamp header missing or invalid format".to_string(),
+                    )
+                    .await;
                 return (
                     StatusCode::BAD_REQUEST,
                     "Timestamp header missing or invalid format",
                 )
-                    .into_response()
+                    .into_response();
             }
         };
 
-        let image_exists = match server_config
+        match server_config
             .database
             .query_media(user_id.clone(), digest.clone())
             .await
         {
-            Ok(exists) => exists,
+            Ok(exists) => {
+                if exists {
+                    let _ = server_config
+                        .database
+                        .add_log(
+                            user_id.clone(),
+                            database::LogLevel::Error,
+                            Utc::now().timestamp_millis(),
+                            format!(
+                                "Media Upload: Image with checksum {} already exists for this user",
+                                digest
+                            ),
+                        )
+                        .await;
+                    return (
+                        StatusCode::PRECONDITION_FAILED,
+                        "Image already exists on the server",
+                    )
+                        .into_response();
+                }
+            }
             Err(..) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
         };
 
-        if image_exists {
-            return (
-                StatusCode::PRECONDITION_FAILED,
-                "Image already exists on the server",
-            )
-                .into_response();
+        if !ALLOWED_CONTENT_TYPES.contains(&content_type.as_str()) {
+            let _ = server_config
+                .database
+                .add_log(
+                    user_id,
+                    database::LogLevel::Error,
+                    Utc::now().timestamp_millis(),
+                    format!(
+                        "Media Upload: Tried to upload the unsupported media type {}",
+                        content_type.as_str()
+                    ),
+                )
+                .await;
+            return StatusCode::UNSUPPORTED_MEDIA_TYPE.into_response();
         }
-
-        // FIXME: UNCOMMENT THIS CONDITION!
-
-        //if ALLOWED_CONTENT_TYPES.contains(&content_type.as_str()) {
-        //    return StatusCode::UNSUPPORTED_MEDIA_TYPE.into_response();
-        //}
 
         //Generate the media UUID
         let file_uuid = uuid::Uuid::new_v4();
@@ -86,6 +142,15 @@ pub async fn upload_image(
             .initiate_multipart_upload(&file_uuid.to_string(), &content_type)
             .await
         else {
+            let _ = server_config
+                .database
+                .add_log(
+                    user_id,
+                    database::LogLevel::Error,
+                    Utc::now().timestamp_millis(),
+                    "Media Upload: Error uploading media to object storage".to_string(),
+                )
+                .await;
             return StatusCode::INTERNAL_SERVER_ERROR.into_response();
         };
         let mut part_number = 1;
@@ -110,6 +175,16 @@ pub async fn upload_image(
                             )
                             .await
                         else {
+                            let _ = server_config
+                                .database
+                                .add_log(
+                                    user_id,
+                                    database::LogLevel::Error,
+                                    Utc::now().timestamp_millis(),
+                                    "Media Upload: Error uploading media to object storage"
+                                        .to_string(),
+                                )
+                                .await;
                             return StatusCode::INTERNAL_SERVER_ERROR.into_response();
                         };
                         // Store the ETag of this part
@@ -124,7 +199,6 @@ pub async fn upload_image(
 
                 // Case when there are no more chunks (end of file/stream)
                 Ok(None) => {
-                    println!("Finished receiving file");
                     let Ok(upload_response) = server_config
                         .bucket
                         .put_multipart_chunk(
@@ -136,6 +210,15 @@ pub async fn upload_image(
                         )
                         .await
                     else {
+                        let _ = server_config
+                            .database
+                            .add_log(
+                                user_id,
+                                database::LogLevel::Error,
+                                Utc::now().timestamp_millis(),
+                                "Media Upload: Error uploading media to object storage".to_string(),
+                            )
+                            .await;
                         return StatusCode::INTERNAL_SERVER_ERROR.into_response();
                     };
                     completed_parts.push(upload_response);
@@ -150,6 +233,16 @@ pub async fn upload_image(
                         .await
                     {
                         Err(..) => {
+                            let _ = server_config
+                                .database
+                                .add_log(
+                                    user_id,
+                                    database::LogLevel::Error,
+                                    Utc::now().timestamp_millis(),
+                                    "Media Upload: Error uploading media to object storage"
+                                        .to_string(),
+                                )
+                                .await;
                             return StatusCode::INTERNAL_SERVER_ERROR.into_response();
                         }
                         Ok(..) => {
@@ -161,11 +254,21 @@ pub async fn upload_image(
                                     digest,
                                     timestamp,
                                     file_size,
-                                    file_name,
+                                    file_name.to_owned(),
                                 )
                                 .await
                             else {
                                 //If adding to the DB fails, remove the file from the object storage
+                                let _ = server_config
+                                    .database
+                                    .add_log(
+                                        user_id,
+                                        database::LogLevel::Error,
+                                        Utc::now().timestamp_millis(),
+                                        "Media Upload: Error uploading media to object storage"
+                                            .to_string(),
+                                    )
+                                    .await;
                                 server_config
                                     .bucket
                                     .delete_object(file_uuid.to_string())
@@ -184,7 +287,18 @@ pub async fn upload_image(
                         .await
                     {
                         Ok(publish_ack) => publish_ack,
-                        Err(..) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+                        Err(..) => {
+                            let _ = server_config
+                                .database
+                                .add_log(
+                                    user_id,
+                                    database::LogLevel::Error,
+                                    Utc::now().timestamp_millis(),
+                                    "Media Upload: Error publishing picture to NATS".to_string(),
+                                )
+                                .await;
+                            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+                        }
                     };
 
                     // Step 5: publish ml embeddings generation request
@@ -194,7 +308,18 @@ pub async fn upload_image(
                         .await
                     {
                         Ok(publish_ack) => publish_ack,
-                        Err(..) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+                        Err(..) => {
+                            let _ = server_config
+                                .database
+                                .add_log(
+                                    user_id,
+                                    database::LogLevel::Error,
+                                    Utc::now().timestamp_millis(),
+                                    "Media Upload: Error publishing picture to NATS".to_string(),
+                                )
+                                .await;
+                            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+                        }
                     };
 
                     // Step 6: publish metadata request
@@ -204,19 +329,60 @@ pub async fn upload_image(
                         .await
                     {
                         Ok(publish_ack) => publish_ack,
-                        Err(..) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+                        Err(..) => {
+                            let _ = server_config
+                                .database
+                                .add_log(
+                                    user_id,
+                                    database::LogLevel::Error,
+                                    Utc::now().timestamp_millis(),
+                                    "Media Upload: Error publishing picture to NATS".to_string(),
+                                )
+                                .await;
+                            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+                        }
                     };
+
+                    let _ = server_config
+                        .database
+                        .add_log(
+                            user_id,
+                            database::LogLevel::Info,
+                            Utc::now().timestamp_millis(),
+                            format!(
+                                "Media Upload: {} uploaded successfully with id {}",
+                                file_name, file_uuid
+                            ),
+                        )
+                        .await;
 
                     break;
                 }
                 // Case when an error occurs
-                Err(err) => {
-                    println!("Error: {}", err);
+                Err(_) => {
+                    let _ = server_config
+                        .database
+                        .add_log(
+                            user_id,
+                            database::LogLevel::Error,
+                            Utc::now().timestamp_millis(),
+                            "Media Upload: Error receiving file from the client".to_string(),
+                        )
+                        .await;
                     return StatusCode::BAD_REQUEST.into_response();
                 }
             }
         }
         return (StatusCode::OK, file_uuid.to_string()).into_response();
     }
+    let _ = server_config
+        .database
+        .add_log(
+            user_id,
+            database::LogLevel::Error,
+            Utc::now().timestamp_millis(),
+            "Media Upload: No field in multipart upload".to_string(),
+        )
+        .await;
     (StatusCode::BAD_REQUEST).into_response()
 }
