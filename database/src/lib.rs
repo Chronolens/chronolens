@@ -581,6 +581,41 @@ impl DbManager {
             )),
         }
     }
+
+
+    pub async fn insert_face(
+        &self,
+        user_id: String,
+        cluster_ids: Vec<i32>,
+        name: String,
+    ) -> Result<(), DbErr> {
+        let new_face = face::ActiveModel {
+            name: Set(name),
+            ..Default::default()
+        };
+        let face_result = face::Entity::insert(new_face)
+            .exec(&self.connection)
+            .await?;
+        let face_id = face_result.last_insert_id;
+    
+        for cluster_id in cluster_ids {
+            cluster::Entity::update_many()
+                .filter(
+                    cluster::Column::Id
+                        .eq(cluster_id)
+                        .and(cluster::Column::UserId.eq(user_id.clone())),
+                )
+                .set(cluster::ActiveModel {
+                    face_id: Set(Some(face_id)),
+                    ..Default::default()
+                })
+                .exec(&self.connection)
+                .await?;
+        }
+    
+        Ok(())
+    }
+
 }
 
 pub enum GetPreviewError {
