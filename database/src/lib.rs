@@ -96,7 +96,6 @@ impl DbManager {
             .await
     }
 
-  
     pub async fn get_media(&self, media_id: String) -> Result<Option<media::Model>, DbErr> {
         match media::Entity::find_by_id(&media_id)
             .select_only()
@@ -124,12 +123,10 @@ impl DbManager {
             .one(&self.connection)
             .await
         {
-            Ok(result) => {Ok(result)}
-            Err(e) => {Err(e)}
+            Ok(result) => Ok(result),
+            Err(e) => Err(e),
         }
     }
-    
-    
 
     async fn _delete_media(&self, media_id: i32, user_id: i32) -> Result<(), &'static str> {
         // Find the photo to be deleted
@@ -167,6 +164,30 @@ impl DbManager {
         }
     }
 
+    pub async fn add_user(
+        &self,
+        id: String,
+        username: String,
+        password: String,
+    ) -> Result<(), AddUserError> {
+        match self.get_user(username.clone()).await {
+            Ok(_) => Err(AddUserError::AlreadyExists),
+            Err(GetUserError::NotFound) => {
+                let new_user = user::ActiveModel {
+                    id: Set(id),
+                    username: Set(username),
+                    password: Set(password),
+                };
+
+                match new_user.insert(&self.connection).await {
+                    Ok(_) => Ok(()),
+                    Err(_) => Err(AddUserError::InternalError),
+                }
+            }
+            Err(GetUserError::InternalError) => Err(AddUserError::InternalError),
+        }
+    }
+
     pub async fn update_media_preview(
         &self,
         media_id: String,
@@ -201,12 +222,12 @@ impl DbManager {
 
     pub async fn sync_full(&self, user_id: String) -> Result<Vec<RemoteMediaAdded>, &str> {
         match media::Entity::find()
+            .filter(media::Column::UserId.eq(user_id))
+            .filter(media::Column::Deleted.eq(false))
             .select_only()
             .select_column(media::Column::Id)
             .select_column(media::Column::CreatedAt)
             .select_column(media::Column::Hash)
-            .filter(media::Column::UserId.eq(user_id))
-            .filter(media::Column::Deleted.eq(false))
             .into_model::<RemoteMediaAdded>()
             .all(&self.connection)
             .await
@@ -613,6 +634,11 @@ pub enum AddLogError {
 
 pub enum GetUserError {
     NotFound,
+    InternalError,
+}
+
+pub enum AddUserError {
+    AlreadyExists,
     InternalError,
 }
 

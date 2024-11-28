@@ -19,6 +19,7 @@ use routes::{
     faces::faces, login::login, logs::logs, media::media, preview::preview, previews::previews,
     refresh::refresh, sync_full::sync_full, sync_partial::sync_partial, upload_image::upload_image,
     create_face::create_face,
+
 };
 use s3::{creds::Credentials, error::S3Error, Bucket, BucketConfiguration, Region};
 use serde::Deserialize;
@@ -106,6 +107,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let public_routes = Router::new()
         .route("/login", post(login))
+        .route("/register", post(register))
         .route("/refresh", post(refresh));
 
         let private_routes = Router::new()
