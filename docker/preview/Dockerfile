@@ -1,4 +1,4 @@
-FROM ghcr.io/chronolens/chronolens/libheif:latest
+FROM ghcr.io/chronolens/libheif:latest
 
 WORKDIR /app
 COPY . .
