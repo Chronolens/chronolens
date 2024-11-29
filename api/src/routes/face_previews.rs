@@ -52,7 +52,7 @@ pub async fn face_previews(
         }
         Err(GetPreviewError::InternalError) => (StatusCode::INTERNAL_SERVER_ERROR).into_response(),
         Err(GetPreviewError::NotFound) => (
-            StatusCode::UNAUTHORIZED,
+            StatusCode::FORBIDDEN,
             "Cluster does not exist or user does not have permissions to access it",
         )
             .into_response(),
