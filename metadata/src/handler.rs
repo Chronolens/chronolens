@@ -56,8 +56,11 @@ pub async fn handle_request(msg: Message, bucket: Box<Bucket>, db: DbManager) {
                     orientation,
                 )
                 .await;
+            let _ = msg.ack_with(async_nats::jetstream::AckKind::Ack).await;
         }
-        Err(e) => panic!("Error reading exif {e}"),
+        Err(_) => {
+            let _ = msg.ack_with(async_nats::jetstream::AckKind::Term).await;
+        }
     };
 }
 
